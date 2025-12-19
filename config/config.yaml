@@ -1,0 +1,44 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  readTimeout: "30s"
+  writeTimeout: "30s"
+  idleTimeout: "120s"
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "eir"
+  password: "eir_password"
+  database: "eir"
+  sslMode: "disable"
+  maxOpenConns: 25
+  maxIdleConns: 5
+  connMaxLifetime: "5m"
+  connMaxIdleTime: "10m"
+
+diameter:
+  listenAddr: "0.0.0.0:3868"
+  originHost: "eir.example.com"
+  originRealm: "example.com"
+  productName: "Go-EIR"
+  vendorID: 10415
+
+cache:
+  enabled: false
+  provider: "redis"
+  redis:
+    host: "localhost"
+    port: 6379
+    password: ""
+    db: 0
+
+logging:
+  level: "info"
+  format: "json"
+  outputPath: "stdout"
+
+metrics:
+  enabled: true
+  port: 9090
+  path: "/metrics"

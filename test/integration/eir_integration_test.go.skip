@@ -1,0 +1,406 @@
+package integration
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/hsdfat/diam-gw/commands/s13"
+	"github.com/hsdfat/diam-gw/models_base"
+	"github.com/hsdfat/diam-gw/simulator"
+	"github.com/hsdfat8/eir/internal/adapters/mocks"
+	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/domain/service"
+)
+
+// TestEIRIntegration_WithDRASimulator tests EIR integration with DRA simulator
+func TestEIRIntegration_WithDRASimulator(t *testing.T) {
+	// Setup
+	ctx := context.Background()
+
+	// 1. Create mock repositories
+	imeiRepo := mocks.NewMockIMEIRepository()
+	auditRepo := mocks.NewMockAuditRepository()
+
+	// 2. Seed test data
+	seedTestData(imeiRepo)
+
+	// 3. Create EIR service
+	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+
+	// 4. Start DRA simulator
+	draConfig := simulator.DRAConfig{
+		Address:     "127.0.0.1:13868",
+		OriginHost:  "dra.test.epc.mnc001.mcc001.3gppnetwork.org",
+		OriginRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+		ProductName: "DRA-Simulator/1.0",
+	}
+
+	draSimulator := simulator.NewDRASimulator(draConfig)
+
+	// Configure S13 handler to route to EIR service
+	draSimulator.SetS13Handler(func(ctx context.Context, req *s13.MEIdentityCheckRequest) (*s13.MEIdentityCheckAnswer, error) {
+		// Extract IMEI from request
+		var imei string
+		if req.TerminalInformation != nil && req.TerminalInformation.Imei != nil {
+			imei = string(*req.TerminalInformation.Imei)
+		}
+
+		// Build EIR service request
+		eirRequest := &ports.CheckEquipmentRequest{
+			IMEI:          imei,
+			RequestSource: "DIAMETER_S13",
+		}
+
+		if req.TerminalInformation != nil && req.TerminalInformation.SoftwareVersion != nil {
+			sv := string(*req.TerminalInformation.SoftwareVersion)
+			eirRequest.IMEISV = &sv
+		}
+
+		if req.UserName != nil {
+			un := string(*req.UserName)
+			eirRequest.UserName = &un
+		}
+
+		originHost := string(req.OriginHost)
+		originRealm := string(req.OriginRealm)
+		sessionID := string(req.SessionId)
+
+		eirRequest.OriginHost = &originHost
+		eirRequest.OriginRealm = &originRealm
+		eirRequest.SessionID = &sessionID
+
+		// Call EIR service
+		eirResponse, err := eirService.CheckEquipment(ctx, eirRequest)
+		if err != nil {
+			return nil, fmt.Errorf("EIR service error: %w", err)
+		}
+
+		// Build Diameter answer
+		answer := s13.NewMEIdentityCheckAnswer()
+		answer.SessionId = req.SessionId
+		answer.AuthSessionState = models_base.Enumerated(1) // NO_STATE_MAINTAINED
+		answer.OriginHost = models_base.DiameterIdentity(draConfig.OriginHost)
+		answer.OriginRealm = models_base.DiameterIdentity(draConfig.OriginRealm)
+
+		resultCode := models_base.Unsigned32(2001) // DIAMETER_SUCCESS
+		answer.ResultCode = &resultCode
+
+		equipmentStatus := models_base.Enumerated(models.ToDialDialStatus(eirResponse.Status))
+		answer.EquipmentStatus = &equipmentStatus
+
+		// Match hop-by-hop and end-to-end IDs
+		answer.Header.HopByHopID = req.Header.HopByHopID
+		answer.Header.EndToEndID = req.Header.EndToEndID
+
+		return answer, nil
+	})
+
+	// Start the DRA simulator
+	err := draSimulator.Start()
+	if err != nil {
+		t.Fatalf("Failed to start DRA simulator: %v", err)
+	}
+	defer draSimulator.Stop()
+
+	// Wait for simulator to be ready
+	time.Sleep(100 * time.Millisecond)
+
+	// 5. Run test scenarios
+	t.Run("CheckWhitelistedIMEI", func(t *testing.T) {
+		testCheckWhitelistedIMEI(t, ctx, eirService, imeiRepo, auditRepo)
+	})
+
+	t.Run("CheckBlacklistedIMEI", func(t *testing.T) {
+		testCheckBlacklistedIMEI(t, ctx, eirService, imeiRepo, auditRepo)
+	})
+
+	t.Run("CheckGreylistedIMEI", func(t *testing.T) {
+		testCheckGreylistedIMEI(t, ctx, eirService, imeiRepo, auditRepo)
+	})
+
+	t.Run("CheckUnknownIMEI", func(t *testing.T) {
+		testCheckUnknownIMEI(t, ctx, eirService, imeiRepo, auditRepo)
+	})
+
+	t.Run("CheckInvalidIMEI", func(t *testing.T) {
+		testCheckInvalidIMEI(t, ctx, eirService)
+	})
+
+	t.Run("ProvisionAndCheckIMEI", func(t *testing.T) {
+		testProvisionAndCheckIMEI(t, ctx, eirService, imeiRepo)
+	})
+
+	t.Run("IncrementCheckCounter", func(t *testing.T) {
+		testIncrementCheckCounter(t, ctx, eirService, imeiRepo)
+	})
+
+	t.Run("AuditLogging", func(t *testing.T) {
+		testAuditLogging(t, ctx, eirService, auditRepo)
+	})
+}
+
+// Test scenarios
+
+func testCheckWhitelistedIMEI(t *testing.T, ctx context.Context, eirService ports.EIRService, imeiRepo *mocks.MockIMEIRepository, auditRepo *mocks.MockAuditRepository) {
+	initialAuditCount := auditRepo.Count()
+
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          "123456789012345", // Whitelisted IMEI
+		RequestSource: "DIAMETER_S13",
+	}
+
+	response, err := eirService.CheckEquipment(ctx, request)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	if response.Status != models.EquipmentStatusWhitelisted {
+		t.Errorf("Expected status WHITELISTED, got %s", response.Status)
+	}
+
+	// Verify audit log was created
+	if auditRepo.Count() != initialAuditCount+1 {
+		t.Errorf("Expected audit count to increase by 1")
+	}
+}
+
+func testCheckBlacklistedIMEI(t *testing.T, ctx context.Context, eirService ports.EIRService, imeiRepo *mocks.MockIMEIRepository, auditRepo *mocks.MockAuditRepository) {
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          "999999999999999", // Blacklisted IMEI
+		RequestSource: "DIAMETER_S13",
+	}
+
+	response, err := eirService.CheckEquipment(ctx, request)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	if response.Status != models.EquipmentStatusBlacklisted {
+		t.Errorf("Expected status BLACKLISTED, got %s", response.Status)
+	}
+
+	if response.Reason == nil || *response.Reason != "Stolen device" {
+		t.Errorf("Expected reason 'Stolen device'")
+	}
+}
+
+func testCheckGreylistedIMEI(t *testing.T, ctx context.Context, eirService ports.EIRService, imeiRepo *mocks.MockIMEIRepository, auditRepo *mocks.MockAuditRepository) {
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          "555555555555555", // Greylisted IMEI
+		RequestSource: "DIAMETER_S13",
+	}
+
+	response, err := eirService.CheckEquipment(ctx, request)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	if response.Status != models.EquipmentStatusGreylisted {
+		t.Errorf("Expected status GREYLISTED, got %s", response.Status)
+	}
+}
+
+func testCheckUnknownIMEI(t *testing.T, ctx context.Context, eirService ports.EIRService, imeiRepo *mocks.MockIMEIRepository, auditRepo *mocks.MockAuditRepository) {
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          "111111111111111", // Unknown IMEI (not in database)
+		RequestSource: "DIAMETER_S13",
+	}
+
+	response, err := eirService.CheckEquipment(ctx, request)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	// Default policy should be WHITELISTED for unknown equipment
+	if response.Status != models.EquipmentStatusWhitelisted {
+		t.Errorf("Expected default status WHITELISTED for unknown IMEI, got %s", response.Status)
+	}
+}
+
+func testCheckInvalidIMEI(t *testing.T, ctx context.Context, eirService ports.EIRService) {
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          "invalid", // Invalid IMEI
+		RequestSource: "DIAMETER_S13",
+	}
+
+	_, err := eirService.CheckEquipment(ctx, request)
+	if err == nil {
+		t.Error("Expected error for invalid IMEI, got nil")
+	}
+}
+
+func testProvisionAndCheckIMEI(t *testing.T, ctx context.Context, eirService ports.EIRService, imeiRepo *mocks.MockIMEIRepository) {
+	imei := "777777777777777"
+
+	// Provision new equipment
+	provisionRequest := &ports.ProvisionEquipmentRequest{
+		IMEI:    imei,
+		Status:  models.EquipmentStatusBlacklisted,
+		AddedBy: "integration_test",
+	}
+
+	err := eirService.ProvisionEquipment(ctx, provisionRequest)
+	if err != nil {
+		t.Fatalf("ProvisionEquipment failed: %v", err)
+	}
+
+	// Check the provisioned equipment
+	checkRequest := &ports.CheckEquipmentRequest{
+		IMEI:          imei,
+		RequestSource: "DIAMETER_S13",
+	}
+
+	response, err := eirService.CheckEquipment(ctx, checkRequest)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	if response.Status != models.EquipmentStatusBlacklisted {
+		t.Errorf("Expected status BLACKLISTED, got %s", response.Status)
+	}
+}
+
+func testIncrementCheckCounter(t *testing.T, ctx context.Context, eirService ports.EIRService, imeiRepo *mocks.MockIMEIRepository) {
+	imei := "123456789012345"
+
+	// Get initial check count
+	equipment, err := imeiRepo.GetByIMEI(ctx, imei)
+	if err != nil {
+		t.Fatalf("Failed to get equipment: %v", err)
+	}
+	initialCount := equipment.CheckCount
+
+	// Perform check
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          imei,
+		RequestSource: "DIAMETER_S13",
+	}
+
+	_, err = eirService.CheckEquipment(ctx, request)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	// Verify check count incremented
+	equipment, err = imeiRepo.GetByIMEI(ctx, imei)
+	if err != nil {
+		t.Fatalf("Failed to get equipment: %v", err)
+	}
+
+	if equipment.CheckCount != initialCount+1 {
+		t.Errorf("Expected check count %d, got %d", initialCount+1, equipment.CheckCount)
+	}
+
+	if equipment.LastCheckTime == nil {
+		t.Error("Expected LastCheckTime to be set")
+	}
+}
+
+func testAuditLogging(t *testing.T, ctx context.Context, eirService ports.EIRService, auditRepo *mocks.MockAuditRepository) {
+	imei := "123456789012345"
+	userName := "user@test.com"
+	sessionID := "session-12345"
+	originHost := "mme.test.epc.mnc001.mcc001.3gppnetwork.org"
+	originRealm := "test.epc.mnc001.mcc001.3gppnetwork.org"
+
+	initialCount := auditRepo.Count()
+
+	request := &ports.CheckEquipmentRequest{
+		IMEI:          imei,
+		UserName:      &userName,
+		SessionID:     &sessionID,
+		OriginHost:    &originHost,
+		OriginRealm:   &originRealm,
+		RequestSource: "DIAMETER_S13",
+	}
+
+	_, err := eirService.CheckEquipment(ctx, request)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	// Verify audit log was created
+	if auditRepo.Count() != initialCount+1 {
+		t.Fatalf("Expected audit count to increase by 1")
+	}
+
+	// Get the latest audit log
+	logs, err := auditRepo.GetAuditsByIMEI(ctx, imei, 0, 100)
+	if err != nil {
+		t.Fatalf("Failed to get audit logs: %v", err)
+	}
+
+	if len(logs) == 0 {
+		t.Fatal("No audit logs found")
+	}
+
+	// Verify audit log fields
+	latestLog := logs[len(logs)-1]
+	if latestLog.IMEI != imei {
+		t.Errorf("Expected IMEI %s, got %s", imei, latestLog.IMEI)
+	}
+
+	if latestLog.UserName == nil || *latestLog.UserName != userName {
+		t.Errorf("Expected UserName %s", userName)
+	}
+
+	if latestLog.SessionID == nil || *latestLog.SessionID != sessionID {
+		t.Errorf("Expected SessionID %s", sessionID)
+	}
+
+	if latestLog.OriginHost == nil || *latestLog.OriginHost != originHost {
+		t.Errorf("Expected OriginHost %s", originHost)
+	}
+
+	if latestLog.RequestSource != "DIAMETER_S13" {
+		t.Errorf("Expected RequestSource DIAMETER_S13, got %s", latestLog.RequestSource)
+	}
+}
+
+// Helper functions
+
+func seedTestData(repo *mocks.MockIMEIRepository) {
+	now := time.Now()
+
+	// Whitelisted equipment
+	reason1 := "Verified legitimate device"
+	repo.AddEquipment(&models.Equipment{
+		IMEI:             "123456789012345",
+		Status:           models.EquipmentStatusWhitelisted,
+		Reason:           &reason1,
+		LastUpdated:      now,
+		CheckCount:       0,
+		AddedBy:          "system",
+		ManufacturerTAC:  stringPtr("12345678"),
+		ManufacturerName: stringPtr("Samsung"),
+	})
+
+	// Blacklisted equipment
+	reason2 := "Stolen device"
+	repo.AddEquipment(&models.Equipment{
+		IMEI:        "999999999999999",
+		Status:      models.EquipmentStatusBlacklisted,
+		Reason:      &reason2,
+		LastUpdated: now,
+		CheckCount:  0,
+		AddedBy:     "fraud_dept",
+	})
+
+	// Greylisted equipment
+	reason3 := "Under investigation"
+	repo.AddEquipment(&models.Equipment{
+		IMEI:        "555555555555555",
+		Status:      models.EquipmentStatusGreylisted,
+		Reason:      &reason3,
+		LastUpdated: now,
+		CheckCount:  0,
+		AddedBy:     "security",
+	})
+}
+
+func stringPtr(s string) *string {
+	return &s
+}

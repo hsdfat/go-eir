@@ -1,0 +1,585 @@
+package integration
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"testing"
+	"time"
+
+	"github.com/hsdfat/diam-gw/commands/base"
+	"github.com/hsdfat/diam-gw/commands/s13"
+	"github.com/hsdfat/diam-gw/models_base"
+	"github.com/hsdfat/diam-gw/simulator"
+	"github.com/hsdfat8/eir/internal/adapters/diameter"
+	"github.com/hsdfat8/eir/internal/adapters/mocks"
+	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/domain/service"
+)
+
+// TestFullStackIntegration tests the complete flow:
+// Diameter Client <-> DRA Simulator <-> EIR Diameter Server <-> EIR Service <-> Mock Database
+func TestFullStackIntegration(t *testing.T) {
+	ctx := context.Background()
+
+	// ==========================================
+	// 1. Setup Mock Database Layer
+	// ==========================================
+	imeiRepo := mocks.NewMockIMEIRepository()
+	auditRepo := mocks.NewMockAuditRepository()
+	seedTestData(imeiRepo)
+
+	t.Log("✓ Mock database repositories initialized")
+
+	// ==========================================
+	// 2. Create EIR Service (Business Logic)
+	// ==========================================
+	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+
+	t.Log("✓ EIR service created")
+
+	// ==========================================
+	// 3. Start EIR Diameter Server (Gateway)
+	// ==========================================
+	eirDiameterConfig := diameter.ServerConfig{
+		Address:     "127.0.0.1:13870",
+		OriginHost:  "eir.test.epc.mnc001.mcc001.3gppnetwork.org",
+		OriginRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+		ProductName: "EIR/1.0",
+	}
+
+	eirServer, err := startEIRDiameterServer(eirDiameterConfig, eirService)
+	if err != nil {
+		t.Fatalf("Failed to start EIR Diameter server: %v", err)
+	}
+	defer eirServer.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+	t.Logf("✓ EIR Diameter server listening on %s", eirDiameterConfig.Address)
+
+	// ==========================================
+	// 4. Start DRA Simulator (Routing Agent)
+	// ==========================================
+	draConfig := simulator.DRAConfig{
+		Address:     "127.0.0.1:13871",
+		OriginHost:  "dra.test.epc.mnc001.mcc001.3gppnetwork.org",
+		OriginRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+		ProductName: "DRA-Simulator/1.0",
+	}
+
+	draSimulator := setupDRAAsProxy(draConfig, eirDiameterConfig.Address)
+
+	err = draSimulator.Start()
+	if err != nil {
+		t.Fatalf("Failed to start DRA simulator: %v", err)
+	}
+	defer draSimulator.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+	t.Logf("✓ DRA simulator listening on %s", draConfig.Address)
+
+	// ==========================================
+	// 5. Create Diameter Client (MME)
+	// ==========================================
+	client := &DiameterClient{
+		serverAddr:  draConfig.Address,
+		originHost:  "mme.test.epc.mnc001.mcc001.3gppnetwork.org",
+		originRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+	}
+
+	t.Log("✓ Diameter client created")
+
+	// ==========================================
+	// 6. Run Integration Test Scenarios
+	// ==========================================
+	t.Run("CompleteFlow_ClientToDRA_ToEIR", func(t *testing.T) {
+		testCompleteFlow(t, ctx, client, imeiRepo, auditRepo)
+	})
+
+	t.Run("MultipleClients_ConcurrentChecks", func(t *testing.T) {
+		testConcurrentClients(t, draConfig.Address, imeiRepo)
+	})
+
+	t.Run("BlacklistedDevice_Rejected", func(t *testing.T) {
+		testBlacklistedDeviceFlow(t, client)
+	})
+
+	t.Run("UnknownDevice_DefaultPolicy", func(t *testing.T) {
+		testUnknownDeviceFlow(t, client)
+	})
+
+	t.Run("AuditTrail_FullStack", func(t *testing.T) {
+		testAuditTrailFullStack(t, client, auditRepo)
+	})
+}
+
+// ServerConfig holds EIR Diameter server configuration
+type ServerConfig struct {
+	Address     string
+	OriginHost  string
+	OriginRealm string
+	ProductName string
+}
+
+// EIRDiameterServer represents the EIR Diameter protocol server
+type EIRDiameterServer struct {
+	config   ServerConfig
+	handler  *diameter.S13Handler
+	listener net.Listener
+	shutdown chan struct{}
+	running  bool
+	conns    []net.Conn
+}
+
+// startEIRDiameterServer starts the EIR Diameter server
+func startEIRDiameterServer(config ServerConfig, eirService ports.EIRService) (*EIRDiameterServer, error) {
+	listener, err := net.Listen("tcp", config.Address)
+	if err != nil {
+		return nil, err
+	}
+
+	server := &EIRDiameterServer{
+		config:   config,
+		handler:  diameter.NewS13Handler(eirService, config.OriginHost, config.OriginRealm),
+		listener: listener,
+		shutdown: make(chan struct{}),
+		running:  true,
+		conns:    make([]net.Conn, 0),
+	}
+
+	go server.acceptConnections()
+
+	return server, nil
+}
+
+// acceptConnections accepts incoming connections
+func (s *EIRDiameterServer) acceptConnections() {
+	for s.running {
+		conn, err := s.listener.Accept()
+		if err != nil {
+			if !s.running {
+				return
+			}
+			continue
+		}
+
+		s.conns = append(s.conns, conn)
+		go s.handleConnection(conn)
+	}
+}
+
+// handleConnection handles a single Diameter connection
+func (s *EIRDiameterServer) handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	for {
+		select {
+		case <-s.shutdown:
+			return
+		default:
+		}
+
+		// Set read timeout
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+
+		// Read Diameter header (20 bytes)
+		header := make([]byte, 20)
+		n, err := conn.Read(header)
+		if err != nil {
+			return
+		}
+
+		if n < 20 {
+			return
+		}
+
+		// Parse message length
+		messageLength := uint32(header[1])<<16 | uint32(header[2])<<8 | uint32(header[3])
+
+		// Read remaining message
+		messageBody := make([]byte, messageLength-20)
+		if len(messageBody) > 0 {
+			_, err = conn.Read(messageBody)
+			if err != nil {
+				return
+			}
+		}
+
+		// Combine header and body
+		fullMessage := append(header, messageBody...)
+
+		// Parse command code
+		commandCode := uint32(header[5])<<16 | uint32(header[6])<<8 | uint32(header[7])
+
+		// Route message
+		response, err := s.routeMessage(commandCode, fullMessage)
+		if err != nil {
+			continue
+		}
+
+		if response != nil {
+			conn.Write(response)
+		}
+	}
+}
+
+// routeMessage routes messages to appropriate handlers
+func (s *EIRDiameterServer) routeMessage(commandCode uint32, message []byte) ([]byte, error) {
+	ctx := context.Background()
+
+	switch commandCode {
+	case 257: // CER
+		return s.handleCER(message)
+	case 280: // DWR
+		return s.handleDWR(message)
+	case 324: // ME-Identity-Check-Request
+		return s.handleMEIdentityCheck(ctx, message)
+	default:
+		return nil, fmt.Errorf("unknown command code: %d", commandCode)
+	}
+}
+
+// handleCER handles Capabilities-Exchange-Request
+func (s *EIRDiameterServer) handleCER(message []byte) ([]byte, error) {
+	req := &base.CapabilitiesExchangeRequest{}
+	if err := req.Unmarshal(message); err != nil {
+		return nil, err
+	}
+
+	cea := base.NewCapabilitiesExchangeAnswer()
+	cea.ResultCode = models_base.Unsigned32(2001) // DIAMETER_SUCCESS
+	cea.OriginHost = models_base.DiameterIdentity(s.config.OriginHost)
+	cea.OriginRealm = models_base.DiameterIdentity(s.config.OriginRealm)
+	cea.HostIpAddress = []models_base.Address{
+		models_base.Address(net.ParseIP("127.0.0.1")),
+	}
+	cea.VendorId = models_base.Unsigned32(10415)
+	cea.ProductName = models_base.UTF8String(s.config.ProductName)
+	cea.AuthApplicationId = req.AuthApplicationId
+
+	cea.Header.HopByHopID = req.Header.HopByHopID
+	cea.Header.EndToEndID = req.Header.EndToEndID
+
+	return cea.Marshal()
+}
+
+// handleDWR handles Device-Watchdog-Request
+func (s *EIRDiameterServer) handleDWR(message []byte) ([]byte, error) {
+	req := &base.DeviceWatchdogRequest{}
+	if err := req.Unmarshal(message); err != nil {
+		return nil, err
+	}
+
+	dwa := base.NewDeviceWatchdogAnswer()
+	dwa.ResultCode = models_base.Unsigned32(2001)
+	dwa.OriginHost = models_base.DiameterIdentity(s.config.OriginHost)
+	dwa.OriginRealm = models_base.DiameterIdentity(s.config.OriginRealm)
+
+	dwa.Header.HopByHopID = req.Header.HopByHopID
+	dwa.Header.EndToEndID = req.Header.EndToEndID
+
+	return dwa.Marshal()
+}
+
+// handleMEIdentityCheck handles ME-Identity-Check-Request
+func (s *EIRDiameterServer) handleMEIdentityCheck(ctx context.Context, message []byte) ([]byte, error) {
+	req := &s13.MEIdentityCheckRequest{}
+	if err := req.Unmarshal(message); err != nil {
+		return nil, err
+	}
+
+	answer, err := s.handler.HandleMEIdentityCheckRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return answer.Marshal()
+}
+
+// Stop stops the EIR Diameter server
+func (s *EIRDiameterServer) Stop() error {
+	s.running = false
+	close(s.shutdown)
+
+	if s.listener != nil {
+		s.listener.Close()
+	}
+
+	for _, conn := range s.conns {
+		conn.Close()
+	}
+
+	return nil
+}
+
+// setupDRAAsProxy configures DRA to proxy requests to EIR server
+func setupDRAAsProxy(draConfig simulator.DRAConfig, eirServerAddr string) *simulator.DRASimulator {
+	draSimulator := simulator.NewDRASimulator(draConfig)
+
+	// Configure S13 handler to proxy to EIR server
+	draSimulator.SetS13Handler(func(ctx context.Context, req *s13.MEIdentityCheckRequest) (*s13.MEIdentityCheckAnswer, error) {
+		// Connect to EIR server
+		conn, err := net.Dial("tcp", eirServerAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to EIR: %w", err)
+		}
+		defer conn.Close()
+
+		// Forward request to EIR
+		reqBytes, err := req.Marshal()
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = conn.Write(reqBytes)
+		if err != nil {
+			return nil, err
+		}
+
+		// Read response from EIR
+		header := make([]byte, 20)
+		_, err = conn.Read(header)
+		if err != nil {
+			return nil, err
+		}
+
+		messageLength := uint32(header[1])<<16 | uint32(header[2])<<8 | uint32(header[3])
+		messageBody := make([]byte, messageLength-20)
+		if len(messageBody) > 0 {
+			_, err = conn.Read(messageBody)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		fullMessage := append(header, messageBody...)
+
+		// Unmarshal response
+		answer := &s13.MEIdentityCheckAnswer{}
+		err = answer.Unmarshal(fullMessage)
+		if err != nil {
+			return nil, err
+		}
+
+		return answer, nil
+	})
+
+	return draSimulator
+}
+
+// Test scenarios
+
+func testCompleteFlow(t *testing.T, ctx context.Context, client *DiameterClient, imeiRepo *mocks.MockIMEIRepository, auditRepo *mocks.MockAuditRepository) {
+	t.Log("Testing complete flow: Client -> DRA -> EIR -> Database")
+
+	// Connect client to DRA
+	err := client.Connect()
+	if err != nil {
+		t.Fatalf("Failed to connect to DRA: %v", err)
+	}
+	defer client.Close()
+
+	t.Log("  ✓ Client connected to DRA")
+	t.Log("  ✓ CER/CEA exchange completed")
+
+	initialAuditCount := auditRepo.Count()
+
+	// Send ME-Identity-Check-Request
+	imei := "123456789012345"
+	answer, err := client.CheckEquipment(imei)
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	t.Log("  ✓ ME-Identity-Check-Request sent through DRA to EIR")
+
+	// Verify Diameter answer
+	if answer.ResultCode == nil || *answer.ResultCode != 2001 {
+		t.Errorf("Expected result code 2001, got %v", answer.ResultCode)
+	}
+
+	if answer.EquipmentStatus == nil {
+		t.Fatal("Equipment status is nil")
+	}
+
+	expectedStatus := models_base.Enumerated(models.DiameterEquipmentStatusWhitelisted)
+	if *answer.EquipmentStatus != expectedStatus {
+		t.Errorf("Expected equipment status %d (WHITELISTED), got %d", expectedStatus, *answer.EquipmentStatus)
+	}
+
+	t.Log("  ✓ Received correct equipment status from EIR")
+
+	// Verify database was updated
+	equipment, err := imeiRepo.GetByIMEI(ctx, imei)
+	if err != nil {
+		t.Fatalf("Failed to get equipment from database: %v", err)
+	}
+
+	if equipment.CheckCount < 1 {
+		t.Error("Check counter was not incremented")
+	}
+
+	t.Log("  ✓ Database check counter incremented")
+
+	// Verify audit log was created
+	if auditRepo.Count() != initialAuditCount+1 {
+		t.Errorf("Expected audit count to increase by 1")
+	}
+
+	logs, _ := auditRepo.GetAuditsByIMEI(ctx, imei, 0, 10)
+	if len(logs) > 0 {
+		latestLog := logs[len(logs)-1]
+		if latestLog.RequestSource != "DIAMETER_S13" {
+			t.Errorf("Expected request source DIAMETER_S13, got %s", latestLog.RequestSource)
+		}
+	}
+
+	t.Log("  ✓ Audit log created with correct metadata")
+	t.Log("✓ Complete flow test PASSED")
+}
+
+func testConcurrentClients(t *testing.T, draAddr string, imeiRepo *mocks.MockIMEIRepository) {
+	t.Log("Testing concurrent clients")
+
+	numClients := 5
+	checksPerClient := 3
+
+	results := make(chan error, numClients)
+
+	for i := 0; i < numClients; i++ {
+		go func(clientID int) {
+			client := &DiameterClient{
+				serverAddr:  draAddr,
+				originHost:  fmt.Sprintf("mme%d.test.epc.mnc001.mcc001.3gppnetwork.org", clientID),
+				originRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+			}
+
+			err := client.Connect()
+			if err != nil {
+				results <- fmt.Errorf("client %d connect failed: %w", clientID, err)
+				return
+			}
+			defer client.Close()
+
+			for j := 0; j < checksPerClient; j++ {
+				_, err := client.CheckEquipment("123456789012345")
+				if err != nil {
+					results <- fmt.Errorf("client %d check %d failed: %w", clientID, j, err)
+					return
+				}
+			}
+
+			results <- nil
+		}(i)
+	}
+
+	// Wait for all clients
+	for i := 0; i < numClients; i++ {
+		err := <-results
+		if err != nil {
+			t.Errorf("Concurrent client error: %v", err)
+		}
+	}
+
+	t.Logf("  ✓ %d concurrent clients completed %d checks each", numClients, checksPerClient)
+	t.Log("✓ Concurrent clients test PASSED")
+}
+
+func testBlacklistedDeviceFlow(t *testing.T, client *DiameterClient) {
+	t.Log("Testing blacklisted device rejection")
+
+	err := client.Connect()
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer client.Close()
+
+	answer, err := client.CheckEquipment("999999999999999") // Blacklisted
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	if answer.EquipmentStatus == nil {
+		t.Fatal("Equipment status is nil")
+	}
+
+	expectedStatus := models_base.Enumerated(models.DiameterEquipmentStatusBlacklisted)
+	if *answer.EquipmentStatus != expectedStatus {
+		t.Errorf("Expected BLACKLISTED status, got %d", *answer.EquipmentStatus)
+	}
+
+	t.Log("  ✓ Blacklisted device correctly identified")
+	t.Log("✓ Blacklisted device test PASSED")
+}
+
+func testUnknownDeviceFlow(t *testing.T, client *DiameterClient) {
+	t.Log("Testing unknown device default policy")
+
+	err := client.Connect()
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer client.Close()
+
+	answer, err := client.CheckEquipment("111111111111111") // Unknown
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	if answer.EquipmentStatus == nil {
+		t.Fatal("Equipment status is nil")
+	}
+
+	// Default policy should be WHITELISTED
+	expectedStatus := models_base.Enumerated(models.DiameterEquipmentStatusWhitelisted)
+	if *answer.EquipmentStatus != expectedStatus {
+		t.Errorf("Expected default WHITELISTED status, got %d", *answer.EquipmentStatus)
+	}
+
+	t.Log("  ✓ Unknown device correctly assigned default policy (WHITELISTED)")
+	t.Log("✓ Unknown device test PASSED")
+}
+
+func testAuditTrailFullStack(t *testing.T, client *DiameterClient, auditRepo *mocks.MockAuditRepository) {
+	t.Log("Testing audit trail through full stack")
+
+	err := client.Connect()
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer client.Close()
+
+	initialCount := auditRepo.Count()
+
+	// Perform checks on different devices
+	testIMEIs := []string{
+		"123456789012345", // Whitelisted
+		"999999999999999", // Blacklisted
+		"555555555555555", // Greylisted
+	}
+
+	for _, imei := range testIMEIs {
+		_, err := client.CheckEquipment(imei)
+		if err != nil {
+			t.Fatalf("CheckEquipment failed for %s: %v", imei, err)
+		}
+	}
+
+	expectedCount := initialCount + len(testIMEIs)
+	if auditRepo.Count() != expectedCount {
+		t.Errorf("Expected %d audit logs, got %d", expectedCount, auditRepo.Count())
+	}
+
+	// Verify audit logs contain correct information
+	for _, imei := range testIMEIs {
+		logs, _ := auditRepo.GetAuditsByIMEI(context.Background(), imei, 0, 10)
+		if len(logs) == 0 {
+			t.Errorf("No audit logs found for IMEI %s", imei)
+		} else {
+			t.Logf("  ✓ Audit log created for IMEI %s", imei)
+		}
+	}
+
+	t.Log("✓ Audit trail test PASSED")
+}

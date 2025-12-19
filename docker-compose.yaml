@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: eir-postgres
+    environment:
+      POSTGRES_USER: eir
+      POSTGRES_PASSWORD: eir_password
+      POSTGRES_DB: eir
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./internal/adapters/postgres/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - eir-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eir"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: eir-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - eir-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  eir:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eir-service
+    environment:
+      # Database configuration
+      EIR_DATABASE_HOST: postgres
+      EIR_DATABASE_PORT: 5432
+      EIR_DATABASE_USER: eir
+      EIR_DATABASE_PASSWORD: eir_password
+      EIR_DATABASE_DATABASE: eir
+      EIR_DATABASE_SSLMODE: disable
+
+      # Server configuration
+      EIR_SERVER_HOST: 0.0.0.0
+      EIR_SERVER_PORT: 8080
+
+      # Diameter configuration
+      EIR_DIAMETER_LISTENADDR: 0.0.0.0:3868
+      EIR_DIAMETER_ORIGINHOST: eir.example.com
+      EIR_DIAMETER_ORIGINREALM: example.com
+
+      # Cache configuration
+      EIR_CACHE_ENABLED: "true"
+      EIR_CACHE_PROVIDER: redis
+      EIR_CACHE_REDIS_HOST: redis
+      EIR_CACHE_REDIS_PORT: 6379
+
+      # Logging configuration
+      EIR_LOGGING_LEVEL: info
+      EIR_LOGGING_FORMAT: json
+
+      # Metrics configuration
+      EIR_METRICS_ENABLED: "true"
+      EIR_METRICS_PORT: 9090
+    ports:
+      - "8080:8080"   # HTTP API
+      - "3868:3868"   # Diameter S13
+      - "9090:9090"   # Prometheus metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - eir-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: eir-prometheus
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9091:9090"
+    networks:
+      - eir-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: eir-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - eir-network
+    restart: unless-stopped
+
+networks:
+  eir-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

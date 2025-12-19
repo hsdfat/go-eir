@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'eir-cluster'
+    environment: 'production'
+
+scrape_configs:
+  - job_name: 'eir'
+    static_configs:
+      - targets: ['eir:9090']
+        labels:
+          service: 'eir'
+          component: 'core'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  # - "alerts/*.yml"

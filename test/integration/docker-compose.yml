@@ -1,0 +1,145 @@
+# Production-Grade Integration Test Environment for EIR System
+# Architecture: Simulated DRA <-> Diameter Gateway <-> EIR Core (Mock Data)
+# All components run as OCI containers with health checks and proper networking
+
+services:
+  # =================================================================
+  # EIR Core Application - Business Logic with Mock Data Repository
+  # =================================================================
+  eir-core:
+    build:
+      context: ../../..
+      dockerfile: eir/test/integration/containers/eir-core/Dockerfile
+    container_name: eir-core
+    hostname: eir-core
+    networks:
+      - eir-network
+    ports:
+      - "8080:8080"   # HTTP API
+      - "8081:3868"   # Diameter S13 (mapped to avoid conflict)
+      - "9090:9090"   # Prometheus metrics
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - DIAMETER_LISTEN_ADDR=0.0.0.0:3868
+      - DIAMETER_ORIGIN_HOST=eir.test.epc.mnc001.mcc001.3gppnetwork.org
+      - DIAMETER_ORIGIN_REALM=test.epc.mnc001.mcc001.3gppnetwork.org
+      - DIAMETER_PRODUCT_NAME=EIR-Core/1.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # =================================================================
+  # Diameter Gateway - Pure Message Forwarding (No Business Logic)
+  # =================================================================
+  diameter-gateway:
+    build:
+      context: ../../..
+      dockerfile: eir/test/integration/containers/diameter-gateway/Dockerfile
+    container_name: diameter-gateway
+    hostname: diameter-gateway
+    networks:
+      - eir-network
+    ports:
+      - "3868:3868"   # Diameter port for DRA connections
+    environment:
+      - DRA_LISTEN_ADDR=0.0.0.0:3868
+      - EIR_SERVER_ADDR=eir-core:3868
+      - ORIGIN_HOST=diameter-gw.epc.mnc001.mcc001.3gppnetwork.org
+      - ORIGIN_REALM=epc.mnc001.mcc001.3gppnetwork.org
+      - PRODUCT_NAME=Diameter-Gateway/1.0
+    depends_on:
+      eir-core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "netstat -an | grep 3868 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # =================================================================
+  # Simulated DRA - Diameter Routing Agent for Testing
+  # =================================================================
+  simulated-dra:
+    build:
+      context: ../../..
+      dockerfile: eir/test/integration/containers/simulated-dra/Dockerfile
+    container_name: simulated-dra
+    hostname: simulated-dra
+    networks:
+      - eir-network
+    ports:
+      - "3869:3869"   # DRA port for client connections
+    environment:
+      - DRA_LISTEN_ADDR=0.0.0.0:3869
+      - GATEWAY_ADDR=diameter-gateway:3868
+      - ORIGIN_HOST=dra.epc.mnc001.mcc001.3gppnetwork.org
+      - ORIGIN_REALM=epc.mnc001.mcc001.3gppnetwork.org
+      - PRODUCT_NAME=DRA-Simulator/1.0
+    depends_on:
+      diameter-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "netstat -an | grep 3869 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # =================================================================
+  # Performance Test Runner - Automatically runs performance tests
+  # =================================================================
+  performance-test-runner:
+    build:
+      context: ../../..
+      dockerfile: eir/test/integration/containers/performance-test-runner/Dockerfile
+    container_name: performance-test-runner
+    hostname: performance-test-runner
+    networks:
+      - eir-network
+    environment:
+      - DRA_ADDR=simulated-dra:3869
+      - EIR_HTTP_ADDR=eir-core:8080
+    depends_on:
+      simulated-dra:
+        condition: service_healthy
+      diameter-gateway:
+        condition: service_healthy
+      eir-core:
+        condition: service_healthy
+    # Don't restart - exit after tests complete
+    restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+networks:
+  eir-network:
+    name: eir-integration-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

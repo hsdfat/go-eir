@@ -1,0 +1,373 @@
+package integration
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"testing"
+	"time"
+
+	"github.com/hsdfat/diam-gw/commands/base"
+	"github.com/hsdfat/diam-gw/commands/s13"
+	"github.com/hsdfat/diam-gw/models_base"
+	"github.com/hsdfat8/eir/internal/adapters/mocks"
+	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/domain/service"
+)
+
+// TestDiameterClientToEIR tests the full Diameter flow from client to EIR
+func TestDiameterClientToEIR(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Setup mock repositories
+	imeiRepo := mocks.NewMockIMEIRepository()
+	auditRepo := mocks.NewMockAuditRepository()
+	seedTestData(imeiRepo)
+
+	// 2. Create EIR service
+	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+
+	// 3. Start DRA simulator with EIR integration
+	draConfig := simulator.DRAConfig{
+		Address:     "127.0.0.1:13869",
+		OriginHost:  "dra.test.epc.mnc001.mcc001.3gppnetwork.org",
+		OriginRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+		ProductName: "DRA-Simulator/1.0",
+	}
+
+	draSimulator := setupDRAWithEIR(draConfig, eirService)
+
+	err := draSimulator.Start()
+	if err != nil {
+		t.Fatalf("Failed to start DRA simulator: %v", err)
+	}
+	defer draSimulator.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// 4. Create Diameter client
+	client := &DiameterClient{
+		serverAddr:  draConfig.Address,
+		originHost:  "mme.test.epc.mnc001.mcc001.3gppnetwork.org",
+		originRealm: "test.epc.mnc001.mcc001.3gppnetwork.org",
+	}
+
+	// 5. Test scenarios with actual Diameter protocol
+	t.Run("FullFlow_CER_MECheck", func(t *testing.T) {
+		testFullDiameterFlow(t, ctx, client, imeiRepo, auditRepo)
+	})
+
+	t.Run("MultipleChecks", func(t *testing.T) {
+		testMultipleDiameterChecks(t, ctx, client, imeiRepo)
+	})
+}
+
+// DiameterClient represents a simple Diameter client for testing
+type DiameterClient struct {
+	serverAddr  string
+	originHost  string
+	originRealm string
+	conn        net.Conn
+	hopByHopID  uint32
+	endToEndID  uint32
+}
+
+// Connect establishes connection and performs CER/CEA exchange
+func (c *DiameterClient) Connect() error {
+	conn, err := net.Dial("tcp", c.serverAddr)
+	if err != nil {
+		return err
+	}
+	c.conn = conn
+	c.hopByHopID = 1
+	c.endToEndID = 1
+
+	// Send CER
+	cer := c.createCER()
+	cerBytes, err := cer.Marshal()
+	if err != nil {
+		return err
+	}
+
+	_, err = c.conn.Write(cerBytes)
+	if err != nil {
+		return err
+	}
+
+	// Receive CEA
+	header := make([]byte, 20)
+	_, err = c.conn.Read(header)
+	if err != nil {
+		return err
+	}
+
+	messageLength := uint32(header[1])<<16 | uint32(header[2])<<8 | uint32(header[3])
+	messageBody := make([]byte, messageLength-20)
+	if len(messageBody) > 0 {
+		_, err = c.conn.Read(messageBody)
+		if err != nil {
+			return err
+		}
+	}
+
+	fullMessage := append(header, messageBody...)
+	cea := &base.CapabilitiesExchangeAnswer{}
+	err = cea.Unmarshal(fullMessage)
+	if err != nil {
+		return err
+	}
+
+	if cea.ResultCode != 2001 {
+		return err
+	}
+
+	return nil
+}
+
+// Close closes the connection
+func (c *DiameterClient) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
+}
+
+// CheckEquipment sends ME-Identity-Check-Request
+func (c *DiameterClient) CheckEquipment(imei string) (*s13.MEIdentityCheckAnswer, error) {
+	c.hopByHopID++
+	c.endToEndID++
+
+	// Create ME-Identity-Check-Request
+	req := c.createMEIdentityCheckRequest(imei)
+	reqBytes, err := req.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	// Send request
+	_, err = c.conn.Write(reqBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Receive answer
+	header := make([]byte, 20)
+	_, err = c.conn.Read(header)
+	if err != nil {
+		return nil, err
+	}
+
+	messageLength := uint32(header[1])<<16 | uint32(header[2])<<8 | uint32(header[3])
+	messageBody := make([]byte, messageLength-20)
+	if len(messageBody) > 0 {
+		_, err = c.conn.Read(messageBody)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fullMessage := append(header, messageBody...)
+	answer := &s13.MEIdentityCheckAnswer{}
+	err = answer.Unmarshal(fullMessage)
+	if err != nil {
+		return nil, err
+	}
+
+	return answer, nil
+}
+
+func (c *DiameterClient) createCER() *base.CapabilitiesExchangeRequest {
+	cer := base.NewCapabilitiesExchangeRequest()
+
+	cer.OriginHost = models_base.DiameterIdentity(c.originHost)
+	cer.OriginRealm = models_base.DiameterIdentity(c.originRealm)
+	cer.HostIpAddress = []models_base.Address{
+		models_base.Address(net.ParseIP("127.0.0.1")),
+	}
+	cer.VendorId = models_base.Unsigned32(10415) // 3GPP
+	cer.ProductName = models_base.UTF8String("TestClient/1.0")
+	cer.AuthApplicationId = []models_base.Unsigned32{
+		models_base.Unsigned32(16777252), // S13
+	}
+
+	cer.Header.HopByHopID = c.hopByHopID
+	cer.Header.EndToEndID = c.endToEndID
+
+	return cer
+}
+
+func (c *DiameterClient) createMEIdentityCheckRequest(imei string) *s13.MEIdentityCheckRequest {
+	req := s13.NewMEIdentityCheckRequest()
+
+	req.SessionId = models_base.UTF8String("mme.test.epc;123456;1")
+	req.AuthSessionState = models_base.Enumerated(1) // NO_STATE_MAINTAINED
+	req.OriginHost = models_base.DiameterIdentity(c.originHost)
+	req.OriginRealm = models_base.DiameterIdentity(c.originRealm)
+	req.DestinationRealm = models_base.DiameterIdentity("test.epc.mnc001.mcc001.3gppnetwork.org")
+
+	// Set Terminal-Information with IMEI
+	terminalInfo := &s13.TerminalInformation{}
+	imeiStr := models_base.UTF8String(imei)
+	terminalInfo.Imei = &imeiStr
+	req.TerminalInformation = terminalInfo
+
+	// Optional: User-Name
+	userName := models_base.UTF8String("user@test.com")
+	req.UserName = &userName
+
+	req.Header.HopByHopID = c.hopByHopID
+	req.Header.EndToEndID = c.endToEndID
+
+	return req
+}
+
+// setupDRAWithEIR configures a DRA simulator with EIR service integration
+func setupDRAWithEIR(draConfig simulator.DRAConfig, eirService ports.EIRService) *simulator.DRASimulator {
+	draSimulator := simulator.NewDRASimulator(draConfig)
+
+	// Configure S13 handler to route to EIR service
+	draSimulator.SetS13Handler(func(ctx context.Context, req *s13.MEIdentityCheckRequest) (*s13.MEIdentityCheckAnswer, error) {
+		// Extract IMEI from request
+		var imei string
+		if req.TerminalInformation != nil && req.TerminalInformation.Imei != nil {
+			imei = string(*req.TerminalInformation.Imei)
+		}
+
+		// Build EIR service request
+		eirRequest := &ports.CheckEquipmentRequest{
+			IMEI:          imei,
+			RequestSource: "DIAMETER_S13",
+		}
+
+		if req.TerminalInformation != nil && req.TerminalInformation.SoftwareVersion != nil {
+			sv := string(*req.TerminalInformation.SoftwareVersion)
+			eirRequest.IMEISV = &sv
+		}
+
+		if req.UserName != nil {
+			un := string(*req.UserName)
+			eirRequest.UserName = &un
+		}
+
+		originHost := string(req.OriginHost)
+		originRealm := string(req.OriginRealm)
+		sessionID := string(req.SessionId)
+
+		eirRequest.OriginHost = &originHost
+		eirRequest.OriginRealm = &originRealm
+		eirRequest.SessionID = &sessionID
+
+		// Call EIR service
+		eirResponse, err := eirService.CheckEquipment(ctx, eirRequest)
+		if err != nil {
+			return nil, fmt.Errorf("EIR service error: %w", err)
+		}
+
+		// Build Diameter answer
+		answer := s13.NewMEIdentityCheckAnswer()
+		answer.SessionId = req.SessionId
+		answer.AuthSessionState = models_base.Enumerated(1) // NO_STATE_MAINTAINED
+		answer.OriginHost = models_base.DiameterIdentity(draConfig.OriginHost)
+		answer.OriginRealm = models_base.DiameterIdentity(draConfig.OriginRealm)
+
+		resultCode := models_base.Unsigned32(2001) // DIAMETER_SUCCESS
+		answer.ResultCode = &resultCode
+
+		equipmentStatus := models_base.Enumerated(models.ToDialDialStatus(eirResponse.Status))
+		answer.EquipmentStatus = &equipmentStatus
+
+		// Match hop-by-hop and end-to-end IDs
+		answer.Header.HopByHopID = req.Header.HopByHopID
+		answer.Header.EndToEndID = req.Header.EndToEndID
+
+		return answer, nil
+	})
+
+	return draSimulator
+}
+
+// Test scenarios
+
+func testFullDiameterFlow(t *testing.T, ctx context.Context, client *DiameterClient, imeiRepo *mocks.MockIMEIRepository, auditRepo *mocks.MockAuditRepository) {
+	// Connect to DRA
+	err := client.Connect()
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer client.Close()
+
+	t.Log("Successfully completed CER/CEA exchange")
+
+	initialAuditCount := auditRepo.Count()
+
+	// Check whitelisted IMEI
+	answer, err := client.CheckEquipment("123456789012345")
+	if err != nil {
+		t.Fatalf("CheckEquipment failed: %v", err)
+	}
+
+	// Verify result code
+	if answer.ResultCode == nil || *answer.ResultCode != 2001 {
+		t.Errorf("Expected result code 2001 (DIAMETER_SUCCESS)")
+	}
+
+	// Verify equipment status
+	if answer.EquipmentStatus == nil {
+		t.Fatal("Equipment status is nil")
+	}
+
+	expectedStatus := models_base.Enumerated(models.DiameterEquipmentStatusWhitelisted)
+	if *answer.EquipmentStatus != expectedStatus {
+		t.Errorf("Expected equipment status %d (WHITELISTED), got %d", expectedStatus, *answer.EquipmentStatus)
+	}
+
+	// Verify audit log was created
+	if auditRepo.Count() != initialAuditCount+1 {
+		t.Errorf("Expected audit count to increase by 1")
+	}
+
+	t.Log("Successfully checked equipment via Diameter S13")
+}
+
+func testMultipleDiameterChecks(t *testing.T, ctx context.Context, client *DiameterClient, imeiRepo *mocks.MockIMEIRepository) {
+	err := client.Connect()
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer client.Close()
+
+	imei := "123456789012345"
+
+	// Get initial check count
+	equipment, err := imeiRepo.GetByIMEI(ctx, imei)
+	if err != nil {
+		t.Fatalf("Failed to get equipment: %v", err)
+	}
+	initialCount := equipment.CheckCount
+
+	// Perform multiple checks
+	for i := 0; i < 5; i++ {
+		answer, err := client.CheckEquipment(imei)
+		if err != nil {
+			t.Fatalf("CheckEquipment #%d failed: %v", i+1, err)
+		}
+
+		if answer.ResultCode == nil || *answer.ResultCode != 2001 {
+			t.Errorf("Check #%d: Expected result code 2001", i+1)
+		}
+	}
+
+	// Verify check count incremented correctly
+	equipment, err = imeiRepo.GetByIMEI(ctx, imei)
+	if err != nil {
+		t.Fatalf("Failed to get equipment: %v", err)
+	}
+
+	expectedCount := initialCount + 5
+	if equipment.CheckCount != expectedCount {
+		t.Errorf("Expected check count %d, got %d", expectedCount, equipment.CheckCount)
+	}
+
+	t.Logf("Successfully performed 5 checks, counter: %d -> %d", initialCount, equipment.CheckCount)
+}
