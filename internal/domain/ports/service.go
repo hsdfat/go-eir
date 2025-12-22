@@ -7,53 +7,68 @@ import (
 )
 
 // EIRService defines the core business operations for EIR
-// This is the primary port for the EIR domain
+// This interface follows the business logic patterns defined in pkg/logic
 type EIRService interface {
-	// CheckEquipment performs equipment identity check and returns status
-	CheckEquipment(ctx context.Context, request *CheckEquipmentRequest) (*CheckEquipmentResponse, error)
+	// CheckImei performs IMEI check using IMEI-based logic
+	// Maps to pkg/logic.CheckImei
+	CheckImei(ctx context.Context, imei string, status models.SystemStatus) (*CheckImeiResult, error)
 
-	// ProvisionEquipment adds or updates equipment in the database
-	ProvisionEquipment(ctx context.Context, request *ProvisionEquipmentRequest) error
+	// CheckTac performs TAC-based equipment check
+	// Maps to pkg/logic.CheckTac
+	CheckTac(ctx context.Context, imei string, status models.SystemStatus) (*CheckTacResult, error)
 
-	// RemoveEquipment removes equipment from the database
-	RemoveEquipment(ctx context.Context, imei string) error
+	// InsertImei provisions equipment using IMEI logic
+	// Maps to pkg/logic.InsertImei
+	InsertImei(ctx context.Context, imei string, color string, status models.SystemStatus) (*InsertImeiResult, error)
 
-	// GetEquipment retrieves equipment information
+	// InsertTac provisions equipment using TAC range logic
+	// Maps to pkg/logic.InsertTac
+	InsertTac(ctx context.Context, tacInfo *TacInfo) (*InsertTacResult, error)
+
+	// GetEquipment retrieves equipment information (for management/audit)
 	GetEquipment(ctx context.Context, imei string) (*models.Equipment, error)
 
-	// ListEquipment retrieves paginated equipment list
+	// ListEquipment retrieves paginated equipment list (for management/audit)
 	ListEquipment(ctx context.Context, offset, limit int) ([]*models.Equipment, error)
+
+	// RemoveEquipment removes equipment from the database (for management)
+	RemoveEquipment(ctx context.Context, imei string) error
 }
 
-// CheckEquipmentRequest represents an equipment check request
-type CheckEquipmentRequest struct {
-	IMEI          string  // Required: IMEI or IMEISV
-	IMEISV        *string // Optional: IMEISV if separate from IMEI
-	SUPI          *string // Optional: Subscriber Permanent Identifier (5G)
-	GPSI          *string // Optional: Generic Public Subscription Identifier (5G)
-	UserName      *string // Optional: User identifier (4G)
-	OriginHost    *string // Optional: Request origin (for audit)
-	OriginRealm   *string // Optional: Request origin realm (for audit)
-	SessionID     *string // Optional: Session identifier (for audit)
-	RequestSource string  // Required: "DIAMETER_S13", "HTTP_5G", etc.
+// CheckImeiResult represents the result of IMEI check
+type CheckImeiResult struct {
+	Status string  // "ok" or "error"
+	IMEI   string  // The checked IMEI
+	Color  string  // "b" (black), "g" (grey), "w" (white), "unknown", "overload"
 }
 
-// CheckEquipmentResponse represents the result of an equipment check
-type CheckEquipmentResponse struct {
-	IMEI            string                  // The checked IMEI
-	Status          models.EquipmentStatus  // Equipment status
-	Reason          *string                 // Optional reason for the status
-	ManufacturerTAC *string                 // Optional Type Allocation Code
+// CheckTacResult represents the result of TAC-based check
+type CheckTacResult struct {
+	Status  string   // "ok" or "error"
+	IMEI    string   // The checked IMEI
+	Color   string   // "black", "grey", "white", "unknown"
+	TacInfo *TacInfo // TAC information if found
 }
 
-// ProvisionEquipmentRequest represents a provisioning request
-type ProvisionEquipmentRequest struct {
-	IMEI             string                 // Required: IMEI
-	IMEISV           *string                // Optional: IMEISV
-	Status           models.EquipmentStatus // Required: Equipment status
-	Reason           *string                // Optional: Reason for status
-	AddedBy          string                 // Required: Who provisioned this
-	Metadata         *string                // Optional: Additional metadata (JSON)
-	ManufacturerTAC  *string                // Optional: Type Allocation Code
-	ManufacturerName *string                // Optional: Manufacturer name
+// InsertImeiResult represents the result of IMEI insertion
+type InsertImeiResult struct {
+	Status string  // "ok" or "error"
+	IMEI   string  // The inserted IMEI
+	Error  *string // Error code: "overload", "invalid_parameter", "invalid_value", "invalid_length", "invalid_color", "color_conflict", "imei_exist"
+}
+
+// InsertTacResult represents the result of TAC insertion
+type InsertTacResult struct {
+	Status  string   // "ok" or "error"
+	Error   *string  // Error code: "invalid_length", "invalid_color", "invalid_value", "range_exist"
+	TacInfo *TacInfo // The TAC info that was processed
+}
+
+// TacInfo represents TAC range information
+type TacInfo struct {
+	KeyTac        string  // Computed key for storage
+	StartRangeTac string  // Start of TAC range
+	EndRangeTac   string  // End of TAC range
+	Color         string  // "black", "grey", "white"
+	PrevLink      *string // Link to previous range (for optimization)
 }

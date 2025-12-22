@@ -52,46 +52,24 @@ func (h *S13Handler) HandleMEIdentityCheckRequest(ctx context.Context, req *s13.
 		return h.buildErrorAnswer(req, DiameterResultCodeInvalidAVPValue), fmt.Errorf("IMEI is missing")
 	}
 
-	// Extract optional fields
-	var imeisv *string
-	if req.TerminalInformation.SoftwareVersion != nil {
-		sv := string(*req.TerminalInformation.SoftwareVersion)
-		imeisv = &sv
+	// Build system status (default: normal operation)
+	systemStatus := models.SystemStatus{
+		OverloadLevel: 0,
+		TPSOverload:   false,
 	}
 
-	var userName *string
-	if req.UserName != nil {
-		un := string(*req.UserName)
-		userName = &un
-	}
-
-	originHost := string(req.OriginHost)
-	originRealm := string(req.OriginRealm)
-	sessionID := string(req.SessionId)
-
-	// Build EIR service request
-	checkRequest := &ports.CheckEquipmentRequest{
-		IMEI:          imei,
-		IMEISV:        imeisv,
-		UserName:      userName,
-		OriginHost:    &originHost,
-		OriginRealm:   &originRealm,
-		SessionID:     &sessionID,
-		RequestSource: "DIAMETER_S13",
-	}
-
-	// Perform equipment check
-	checkResponse, err := h.eirService.CheckEquipment(ctx, checkRequest)
+	// Perform equipment check using TAC-based logic
+	checkResponse, err := h.eirService.CheckTac(ctx, imei, systemStatus)
 	if err != nil {
 		return h.buildErrorAnswer(req, DiameterResultCodeUnableToComply), fmt.Errorf("equipment check failed: %w", err)
 	}
 
 	// Build successful answer
-	return h.buildSuccessAnswer(req, checkResponse), nil
+	return h.buildSuccessAnswerFromTac(req, checkResponse), nil
 }
 
-// buildSuccessAnswer creates a successful ME-Identity-Check-Answer
-func (h *S13Handler) buildSuccessAnswer(req *s13.MEIdentityCheckRequest, checkResponse *ports.CheckEquipmentResponse) *s13.MEIdentityCheckAnswer {
+// buildSuccessAnswerFromTac creates a successful ME-Identity-Check-Answer from TAC check result
+func (h *S13Handler) buildSuccessAnswerFromTac(req *s13.MEIdentityCheckRequest, checkResponse *ports.CheckTacResult) *s13.MEIdentityCheckAnswer {
 	answer := s13.NewMEIdentityCheckAnswer()
 
 	// Copy from request
@@ -106,11 +84,27 @@ func (h *S13Handler) buildSuccessAnswer(req *s13.MEIdentityCheckRequest, checkRe
 	resultCode := models_base.Unsigned32(DiameterResultCodeSuccess)
 	answer.ResultCode = &resultCode
 
-	// Set equipment status
-	diameterStatus := models_base.Enumerated(models.ToDialDialStatus(checkResponse.Status))
+	// Convert color to equipment status
+	equipmentStatus := convertColorToEquipmentStatus(checkResponse.Color)
+	diameterStatus := models_base.Enumerated(models.ToDialDialStatus(equipmentStatus))
 	answer.EquipmentStatus = &diameterStatus
 
 	return answer
+}
+
+// convertColorToEquipmentStatus converts pkg/logic color codes to EquipmentStatus
+func convertColorToEquipmentStatus(color string) models.EquipmentStatus {
+	switch color {
+	case "black":
+		return models.EquipmentStatusBlacklisted
+	case "grey":
+		return models.EquipmentStatusGreylisted
+	case "white":
+		return models.EquipmentStatusWhitelisted
+	default:
+		// Default to whitelisted for unknown
+		return models.EquipmentStatusWhitelisted
+	}
 }
 
 // buildErrorAnswer creates an error ME-Identity-Check-Answer

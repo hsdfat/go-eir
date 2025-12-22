@@ -43,19 +43,14 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 		return
 	}
 
-	supi := c.Query("supi")
-	gpsi := c.Query("gpsi")
-
-	// Build request
-	checkRequest := &ports.CheckEquipmentRequest{
-		IMEI:          pei,
-		SUPI:          stringPtr(supi),
-		GPSI:          stringPtr(gpsi),
-		RequestSource: "HTTP_5G",
+	// Build system status (default: normal operation)
+	systemStatus := models.SystemStatus{
+		OverloadLevel: 0,
+		TPSOverload:   false,
 	}
 
-	// Perform equipment check
-	response, err := h.eirService.CheckEquipment(c.Request.Context(), checkRequest)
+	// Perform equipment check using TAC-based logic
+	response, err := h.eirService.CheckTac(c.Request.Context(), pei, systemStatus)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidIMEI) {
 			c.JSON(http.StatusBadRequest, ProblemDetails{
@@ -76,9 +71,12 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 		return
 	}
 
+	// Convert color to equipment status
+	equipmentStatus := convertColorToEquipmentStatus(response.Color)
+
 	// Return response
 	c.JSON(http.StatusOK, EirResponseData{
-		Status: response.Status,
+		Status: equipmentStatus,
 	})
 }
 
@@ -95,25 +93,27 @@ func (h *Handler) ProvisionEquipment(c *gin.Context) {
 		return
 	}
 
-	// Build provisioning request
-	provisionReq := &ports.ProvisionEquipmentRequest{
-		IMEI:             req.IMEI,
-		IMEISV:           req.IMEISV,
-		Status:           req.Status,
-		Reason:           req.Reason,
-		AddedBy:          "http_api", // TODO: Extract from auth context
-		Metadata:         req.Metadata,
-		ManufacturerTAC:  req.ManufacturerTAC,
-		ManufacturerName: req.ManufacturerName,
+	// Convert equipment status to color code
+	color := convertEquipmentStatusToColor(req.Status)
+
+	// Build system status (default: normal operation)
+	systemStatus := models.SystemStatus{
+		OverloadLevel: 0,
+		TPSOverload:   false,
 	}
 
-	// Provision equipment
-	if err := h.eirService.ProvisionEquipment(c.Request.Context(), provisionReq); err != nil {
+	// Provision equipment using IMEI logic
+	result, err := h.eirService.InsertImei(c.Request.Context(), req.IMEI, color, systemStatus)
+	if err != nil || result.Status != "ok" {
+		detail := "Failed to provision equipment"
+		if result.Error != nil {
+			detail = *result.Error
+		}
 		c.JSON(http.StatusInternalServerError, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Internal Server Error",
 			Status: http.StatusInternalServerError,
-			Detail: err.Error(),
+			Detail: detail,
 		})
 		return
 	}
@@ -250,4 +250,33 @@ func stringPtr(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// convertColorToEquipmentStatus converts pkg/logic color codes to EquipmentStatus
+func convertColorToEquipmentStatus(color string) models.EquipmentStatus {
+	switch color {
+	case "black", "b":
+		return models.EquipmentStatusBlacklisted
+	case "grey", "g":
+		return models.EquipmentStatusGreylisted
+	case "white", "w":
+		return models.EquipmentStatusWhitelisted
+	default:
+		// Default to whitelisted for unknown
+		return models.EquipmentStatusWhitelisted
+	}
+}
+
+// convertEquipmentStatusToColor converts EquipmentStatus to pkg/logic color codes
+func convertEquipmentStatusToColor(status models.EquipmentStatus) string {
+	switch status {
+	case models.EquipmentStatusBlacklisted:
+		return "b"
+	case models.EquipmentStatusGreylisted:
+		return "g"
+	case models.EquipmentStatusWhitelisted:
+		return "w"
+	default:
+		return "w" // Default to white
+	}
 }

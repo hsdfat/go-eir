@@ -12,6 +12,10 @@ bin/
 *.out
 coverage.html
 
+# PCAP files (test traffic captures)
+*.pcap
+*.pcapng
+
 # Dependency directories
 vendor/
 

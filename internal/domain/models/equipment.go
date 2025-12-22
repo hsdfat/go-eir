@@ -175,3 +175,10 @@ func FromDiameterStatus(diamStatus DiameterEquipmentStatus) EquipmentStatus {
 		return EquipmentStatusWhitelisted
 	}
 }
+
+// SystemStatus represents the operational status of the EIR system
+// Used for overload control and rate limiting
+type SystemStatus struct {
+	OverloadLevel int  // Current overload level (0 = normal)
+	TPSOverload   bool // Transaction Per Second overload flag
+}

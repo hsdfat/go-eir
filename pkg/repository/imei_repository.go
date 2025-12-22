@@ -47,3 +47,18 @@ func (r *InMemoryImeiRepo) Save(info *models.ImeiInfo) error {
 
 	return nil
 }
+
+func (r *InMemoryImeiRepo) ListAll() []models.ImeiInfo {
+	result := make([]models.ImeiInfo, 0, len(r.data))
+	for _, key := range r.sortedKeys {
+		if info, ok := r.data[key]; ok {
+			result = append(result, *info)
+		}
+	}
+	return result
+}
+
+func (r *InMemoryImeiRepo) Clear() {
+	r.data = make(map[string]*models.ImeiInfo)
+	r.sortedKeys = []string{}
+}

@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/hsdfat8/eir/internal/adapters/diameter"
 	httpAdapter "github.com/hsdfat8/eir/internal/adapters/http"
@@ -58,23 +55,27 @@ func main() {
 
 	log.Println("✓ EIR service initialized")
 
-	// Initialize HTTP server
-	router := httpAdapter.SetupRouter(eirService)
-	httpServer := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		Handler:      router,
+	// Initialize HTTP/2 server
+	httpServerConfig := httpAdapter.ServerConfig{
+		ListenAddr:   fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
+		EnableH2C:    true, // Enable HTTP/2 Cleartext for testing
+		// For production with TLS:
+		// EnableTLS:   true,
+		// TLSCertFile: cfg.Server.TLSCertFile,
+		// TLSKeyFile:  cfg.Server.TLSKeyFile,
 	}
 
-	// Start HTTP server
-	go func() {
-		log.Printf("✓ HTTP server listening on %s", httpServer.Addr)
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP server error: %v", err)
-		}
-	}()
+	httpServer := httpAdapter.NewServer(httpServerConfig, eirService)
+
+	// Start HTTP/2 server
+	if err := httpServer.Start(); err != nil {
+		log.Fatalf("Failed to start HTTP server: %v", err)
+	}
+
+	log.Printf("✓ HTTP/2 server listening on %s", httpServer.GetAddr())
 
 	// Initialize Diameter S13 server
 	diameterConfig := diameter.ServerConfig{
@@ -101,12 +102,8 @@ func main() {
 
 	log.Println("Shutting down servers...")
 
-	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Shutdown HTTP server
-	if err := httpServer.Shutdown(ctx); err != nil {
+	// Shutdown HTTP/2 server
+	if err := httpServer.Stop(); err != nil {
 		log.Printf("HTTP server shutdown error: %v", err)
 	}
 
