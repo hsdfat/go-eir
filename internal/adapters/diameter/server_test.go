@@ -71,7 +71,7 @@ func (m *mockEIRService) ListEquipment(ctx context.Context, offset, limit int) (
 // TestServerBasicSetup tests basic server creation and startup
 func TestServerBasicSetup(t *testing.T) {
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:0", // Random port
+		ListenAddr:  "127.0.0.1:3868", // Standard Diameter port
 		OriginHost:  "eir-test.example.com",
 		OriginRealm: "example.com",
 		ProductName: "EIR-Test/1.0",
@@ -111,7 +111,7 @@ func TestServerBasicSetup(t *testing.T) {
 // TestServerS13MEIdentityCheck tests S13 ME-Identity-Check-Request/Answer with PCAP capture
 func TestServerS13MEIdentityCheck(t *testing.T) {
 	// Create PCAP writer in the same directory as the test file
-	pcapFile := "diameter_s13_test.pcap"
+	pcapFile := "diameter_s13_3868_test.pcap"
 	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
 	if err != nil {
 		t.Fatalf("Failed to create PCAP writer: %v", err)
@@ -119,7 +119,7 @@ func TestServerS13MEIdentityCheck(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:0",
+		ListenAddr:  "127.0.0.1:3868", // Standard Diameter port
 		OriginHost:  "eir-test.example.com",
 		OriginRealm: "example.com",
 		ProductName: "EIR-Test/1.0",
@@ -138,7 +138,7 @@ func TestServerS13MEIdentityCheck(t *testing.T) {
 	// Wait for server to start
 	time.Sleep(100 * time.Millisecond)
 
-	addr := server.diamServer.GetListener().Addr().String()
+	addr := "127.0.0.1:3868"
 	t.Logf("Server listening on %s", addr)
 
 	// Create test client with PCAP capture
@@ -221,7 +221,7 @@ func TestServerS13MEIdentityCheck(t *testing.T) {
 // TestServerS13MultipleRequests tests multiple S13 requests with PCAP capture
 func TestServerS13MultipleRequests(t *testing.T) {
 	// Create PCAP writer in the same directory as the test file
-	pcapFile := "diameter_s13_multiple_test.pcap"
+	pcapFile := "diameter_s13_multiple_3868_test.pcap"
 	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
 	if err != nil {
 		t.Fatalf("Failed to create PCAP writer: %v", err)
@@ -229,7 +229,7 @@ func TestServerS13MultipleRequests(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:0",
+		ListenAddr:  "127.0.0.1:3868", // Standard Diameter port
 		OriginHost:  "eir-test.example.com",
 		OriginRealm: "example.com",
 		ProductName: "EIR-Test/1.0",
@@ -247,7 +247,7 @@ func TestServerS13MultipleRequests(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	addr := server.diamServer.GetListener().Addr().String()
+	addr := "127.0.0.1:3868"
 
 	// Create test client with PCAP capture
 	client := newTestClientWithPCAP(t, addr, pcapWriter)

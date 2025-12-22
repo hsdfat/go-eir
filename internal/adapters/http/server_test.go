@@ -71,7 +71,7 @@ func (m *mockEIRService) ListEquipment(ctx context.Context, offset, limit int) (
 // TestServerHTTP1Basic tests basic HTTP/1.1 server
 func TestServerHTTP1Basic(t *testing.T) {
 	config := ServerConfig{
-		ListenAddr: "127.0.0.1:0",
+		ListenAddr: "127.0.0.1:8080", // Standard HTTP port
 	}
 
 	mockService := &mockEIRService{}
@@ -93,10 +93,10 @@ func TestServerHTTP1Basic(t *testing.T) {
 	t.Log("HTTP/1.1 server test passed")
 }
 
-// TestServerH2C tests HTTP/2 cleartext server with PCAP capture
-func TestServerH2C(t *testing.T) {
+// TestServerHTTP1WithPCAP tests HTTP/1.1 server with PCAP capture (easier Wireshark decoding)
+func TestServerHTTP1WithPCAP(t *testing.T) {
 	// Create PCAP writer in the same directory as the test file
-	pcapFile := "http2_h2c_test.pcap"
+	pcapFile := "http1_8080_test.pcap"
 	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
 	if err != nil {
 		t.Fatalf("Failed to create PCAP writer: %v", err)
@@ -104,7 +104,124 @@ func TestServerH2C(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr: "127.0.0.1:0",
+		ListenAddr: "127.0.0.1:8080", // Standard HTTP port
+		EnableH2C:  false,             // Use HTTP/1.1 for easier Wireshark decoding
+	}
+
+	mockService := &mockEIRService{}
+	server := NewServer(config, mockService)
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Get actual listening address
+	addr := "127.0.0.1:8080"
+	t.Logf("HTTP/1.1 server started on %s", addr)
+
+	// Create HTTP/1.1 client with PCAP capture
+	dialer := &net.Dialer{}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := dialer.DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			// Wrap connection with PCAP capture
+			return testutil.NewCaptureConnection(conn, pcapWriter), nil
+		},
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   5 * time.Second,
+	}
+
+	// Test health check endpoint
+	t.Run("HealthCheck", func(t *testing.T) {
+		resp, err := client.Get(fmt.Sprintf("http://%s/health", addr))
+		if err != nil {
+			t.Fatalf("Health check failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status 200, got %d", resp.StatusCode)
+		}
+
+		t.Logf("Health check passed: HTTP/%d.%d", resp.ProtoMajor, resp.ProtoMinor)
+	})
+
+	// Test equipment status check (5G N5g-eir API)
+	t.Run("GetEquipmentStatus", func(t *testing.T) {
+		imei := "123456789012345"
+		url := fmt.Sprintf("http://%s/n5g-eir-eic/v1/equipment-status?pei=%s", addr, imei)
+
+		resp, err := client.Get(url)
+		if err != nil {
+			t.Fatalf("Equipment status check failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, string(body))
+		}
+
+		var result EirResponseData
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if result.Status != models.EquipmentStatusWhitelisted {
+			t.Errorf("Expected status WHITELISTED, got %s", result.Status)
+		}
+
+		t.Logf("Equipment status check passed: %s", result.Status)
+	})
+
+	// Test equipment provisioning
+	t.Run("ProvisionEquipment", func(t *testing.T) {
+		provision := ProvisionRequest{
+			IMEI:   "123456789012345",
+			Status: models.EquipmentStatusWhitelisted,
+		}
+
+		body, _ := json.Marshal(provision)
+		url := fmt.Sprintf("http://%s/api/v1/equipment", addr)
+
+		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("Provision equipment failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Expected status 201, got %d: %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		t.Log("Equipment provisioning passed")
+	})
+
+	t.Logf("PCAP file saved: %s", pcapFile)
+}
+
+// TestServerH2C tests HTTP/2 cleartext server with PCAP capture
+func TestServerH2C(t *testing.T) {
+	// Create PCAP writer in the same directory as the test file
+	pcapFile := "http2_h2c_8080_test.pcap"
+	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
+	if err != nil {
+		t.Fatalf("Failed to create PCAP writer: %v", err)
+	}
+	defer pcapWriter.Close()
+
+	config := ServerConfig{
+		ListenAddr: "127.0.0.1:8080", // Standard HTTP port
 		EnableH2C:  true,
 	}
 
@@ -119,7 +236,7 @@ func TestServerH2C(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Get actual listening address
-	addr := server.GetAddr()
+	addr := "127.0.0.1:8080"
 	t.Logf("HTTP/2 (H2C) server started on %s", addr)
 
 	// Create H2C client
@@ -215,7 +332,7 @@ func TestServerH2C(t *testing.T) {
 // TestServerH2CMultipleRequests tests concurrent HTTP/2 requests with PCAP
 func TestServerH2CMultipleRequests(t *testing.T) {
 	// Create PCAP writer in the same directory as the test file
-	pcapFile := "http2_concurrent_test.pcap"
+	pcapFile := "http2_concurrent_8080_test.pcap"
 	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
 	if err != nil {
 		t.Fatalf("Failed to create PCAP writer: %v", err)
@@ -223,7 +340,7 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr: "127.0.0.1:0",
+		ListenAddr: "127.0.0.1:8080", // Standard HTTP port
 		EnableH2C:  true,
 	}
 
@@ -237,7 +354,7 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	addr := server.GetAddr()
+	addr := "127.0.0.1:8080"
 
 	// Create H2C client
 	client := &http.Client{
@@ -306,7 +423,7 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 // TestServerGracefulShutdown tests graceful server shutdown
 func TestServerGracefulShutdown(t *testing.T) {
 	config := ServerConfig{
-		ListenAddr:      "127.0.0.1:0",
+		ListenAddr:      "127.0.0.1:8080", // Standard HTTP port
 		EnableH2C:       true,
 		ShutdownTimeout: 5 * time.Second,
 	}

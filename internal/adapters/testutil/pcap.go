@@ -14,11 +14,14 @@ import (
 
 // PCAPWriter captures network traffic and writes to PCAP file
 type PCAPWriter struct {
-	filename string
-	file     *os.File
-	writer   *pcapgo.Writer
-	mu       sync.Mutex
-	closed   bool
+	filename   string
+	file       *os.File
+	writer     *pcapgo.Writer
+	mu         sync.Mutex
+	closed     bool
+	seqNum     uint32 // Track sequence numbers for TCP stream
+	ackNum     uint32 // Track acknowledgment numbers
+	connSetup  bool   // Track if TCP handshake was written
 }
 
 // NewPCAPWriter creates a new PCAP writer
@@ -35,9 +38,12 @@ func NewPCAPWriter(filename string) (*PCAPWriter, error) {
 	}
 
 	return &PCAPWriter{
-		filename: filename,
-		file:     file,
-		writer:   writer,
+		filename:  filename,
+		file:      file,
+		writer:    writer,
+		seqNum:    1000, // Initial sequence number
+		ackNum:    1000, // Initial acknowledgment number
+		connSetup: false,
 	}, nil
 }
 
@@ -48,6 +54,14 @@ func (p *PCAPWriter) WritePacket(data []byte, srcIP, dstIP net.IP, srcPort, dstP
 
 	if p.closed {
 		return fmt.Errorf("PCAP writer is closed")
+	}
+
+	// Write TCP handshake on first packet
+	if !p.connSetup {
+		if err := p.writeTCPHandshake(srcIP, dstIP, srcPort, dstPort); err != nil {
+			return err
+		}
+		p.connSetup = true
 	}
 
 	// Build Ethernet layer
@@ -66,13 +80,22 @@ func (p *PCAPWriter) WritePacket(data []byte, srcIP, dstIP net.IP, srcPort, dstP
 		DstIP:    dstIP,
 	}
 
-	// Build TCP layer
+	// Build TCP layer with proper sequence tracking
+	currentSeq := p.seqNum
+	currentAck := p.ackNum
+
+	// Swap seq/ack for inbound packets
+	if isInbound {
+		currentSeq, currentAck = currentAck, currentSeq
+	}
+
 	tcp := &layers.TCP{
 		SrcPort: layers.TCPPort(srcPort),
 		DstPort: layers.TCPPort(dstPort),
-		Seq:     uint32(time.Now().Unix()),
-		Ack:     0,
+		Seq:     currentSeq,
+		Ack:     currentAck,
 		PSH:     true,
+		ACK:     true,
 		Window:  65535,
 	}
 	tcp.SetNetworkLayerForChecksum(ip)
@@ -100,7 +123,93 @@ func (p *PCAPWriter) WritePacket(data []byte, srcIP, dstIP net.IP, srcPort, dstP
 		return fmt.Errorf("failed to write packet: %w", err)
 	}
 
+	// Update sequence numbers
+	if isInbound {
+		p.ackNum += uint32(len(data))
+	} else {
+		p.seqNum += uint32(len(data))
+	}
+
 	return nil
+}
+
+// writeTCPHandshake writes a 3-way TCP handshake to establish connection context
+func (p *PCAPWriter) writeTCPHandshake(srcIP, dstIP net.IP, srcPort, dstPort uint16) error {
+	// SYN packet (client -> server)
+	if err := p.writeTCPPacket(srcIP, dstIP, srcPort, dstPort, p.seqNum, 0, true, false, false, false, nil); err != nil {
+		return err
+	}
+
+	// SYN-ACK packet (server -> client)
+	if err := p.writeTCPPacket(dstIP, srcIP, dstPort, srcPort, p.ackNum, p.seqNum+1, true, false, true, false, nil); err != nil {
+		return err
+	}
+
+	// ACK packet (client -> server)
+	if err := p.writeTCPPacket(srcIP, dstIP, srcPort, dstPort, p.seqNum+1, p.ackNum+1, false, false, true, false, nil); err != nil {
+		return err
+	}
+
+	// Update sequence numbers after handshake
+	p.seqNum += 1
+	p.ackNum += 1
+
+	return nil
+}
+
+// writeTCPPacket writes a single TCP packet with specified flags
+func (p *PCAPWriter) writeTCPPacket(srcIP, dstIP net.IP, srcPort, dstPort uint16, seq, ack uint32, syn, fin, ackFlag, psh bool, data []byte) error {
+	eth := &layers.Ethernet{
+		SrcMAC:       net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x01},
+		DstMAC:       net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x02},
+		EthernetType: layers.EthernetTypeIPv4,
+	}
+
+	ip := &layers.IPv4{
+		Version:  4,
+		TTL:      64,
+		Protocol: layers.IPProtocolTCP,
+		SrcIP:    srcIP,
+		DstIP:    dstIP,
+	}
+
+	tcp := &layers.TCP{
+		SrcPort: layers.TCPPort(srcPort),
+		DstPort: layers.TCPPort(dstPort),
+		Seq:     seq,
+		Ack:     ack,
+		SYN:     syn,
+		FIN:     fin,
+		ACK:     ackFlag,
+		PSH:     psh,
+		Window:  65535,
+	}
+	tcp.SetNetworkLayerForChecksum(ip)
+
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		ComputeChecksums: true,
+		FixLengths:       true,
+	}
+
+	var err error
+	if data != nil && len(data) > 0 {
+		err = gopacket.SerializeLayers(buf, opts, eth, ip, tcp, gopacket.Payload(data))
+	} else {
+		err = gopacket.SerializeLayers(buf, opts, eth, ip, tcp)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to serialize TCP packet: %w", err)
+	}
+
+	captureInfo := gopacket.CaptureInfo{
+		Timestamp:     time.Now(),
+		CaptureLength: len(buf.Bytes()),
+		Length:        len(buf.Bytes()),
+	}
+
+	return p.writer.WritePacket(captureInfo, buf.Bytes())
 }
 
 // WriteHTTPPacket writes an HTTP packet to the PCAP file
