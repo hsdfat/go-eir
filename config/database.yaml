@@ -1,0 +1,85 @@
+# Database Configuration for EIR Project
+# Supports both PostgreSQL and MongoDB
+
+# Database type: "postgres" or "mongodb"
+database:
+  type: postgres
+
+  # PostgreSQL Configuration
+  postgres:
+    host: localhost
+    port: 5432
+    user: eir
+    password: eir_password
+    database: eir
+    ssl_mode: disable  # Options: disable, require, verify-ca, verify-full
+    max_open_conns: 25
+    max_idle_conns: 5
+    conn_max_lifetime: 300  # seconds (5 minutes)
+    conn_max_idle_time: 600 # seconds (10 minutes)
+    query_timeout: 30       # seconds
+
+  # MongoDB Configuration (alternative to PostgreSQL)
+  mongodb:
+    uri: mongodb://localhost:27017
+    database: eir
+    max_pool_size: 100
+    min_pool_size: 10
+    max_conn_idle_time: 600  # seconds (10 minutes)
+    server_timeout: 30       # seconds
+    socket_timeout: 30       # seconds
+    replica_set: ""          # Leave empty if not using replica set
+    read_preference: primary # Options: primary, secondary, primaryPreferred, secondaryPreferred
+    write_concern: majority  # Options: majority, w1, w2, w3, etc.
+    enable_change_stream: false
+
+---
+# Production PostgreSQL Configuration Example
+database:
+  type: postgres
+  postgres:
+    host: prod-postgres.example.com
+    port: 5432
+    user: eir_prod
+    password: ${EIR_DB_PASSWORD}  # Use environment variable
+    database: eir_production
+    ssl_mode: verify-full
+    max_open_conns: 50
+    max_idle_conns: 10
+    conn_max_lifetime: 600
+    conn_max_idle_time: 1200
+    query_timeout: 60
+
+---
+# Production MongoDB Configuration Example
+database:
+  type: mongodb
+  mongodb:
+    uri: mongodb://eir_prod:${EIR_DB_PASSWORD}@mongo1.example.com:27017,mongo2.example.com:27017,mongo3.example.com:27017/?replicaSet=rs0
+    database: eir_production
+    max_pool_size: 200
+    min_pool_size: 20
+    max_conn_idle_time: 1200
+    server_timeout: 60
+    socket_timeout: 60
+    replica_set: rs0
+    read_preference: primaryPreferred
+    write_concern: majority
+    enable_change_stream: true
+
+---
+# Development/Testing Configuration
+database:
+  type: postgres
+  postgres:
+    host: localhost
+    port: 5432
+    user: eir_dev
+    password: dev_password
+    database: eir_dev
+    ssl_mode: disable
+    max_open_conns: 10
+    max_idle_conns: 2
+    conn_max_lifetime: 300
+    conn_max_idle_time: 600
+    query_timeout: 30

@@ -6,16 +6,15 @@ import (
 
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/jmoiron/sqlx"
 )
 
 // auditRepository implements the AuditRepository interface using PostgreSQL
 type auditRepository struct {
-	db *sqlx.DB
+	db dbExecutor
 }
 
 // NewAuditRepository creates a new PostgreSQL audit repository
-func NewAuditRepository(db *sqlx.DB) ports.AuditRepository {
+func NewAuditRepository(db dbExecutor) ports.AuditRepository {
 	return &auditRepository{db: db}
 }
 

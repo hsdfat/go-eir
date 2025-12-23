@@ -8,7 +8,6 @@ import (
 
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/jmoiron/sqlx"
 )
 
 var (
@@ -18,11 +17,11 @@ var (
 
 // imeiRepository implements the IMEIRepository interface using PostgreSQL
 type imeiRepository struct {
-	db *sqlx.DB
+	db dbExecutor
 }
 
 // NewIMEIRepository creates a new PostgreSQL IMEI repository
-func NewIMEIRepository(db *sqlx.DB) ports.IMEIRepository {
+func NewIMEIRepository(db dbExecutor) ports.IMEIRepository {
 	return &imeiRepository{db: db}
 }
 
