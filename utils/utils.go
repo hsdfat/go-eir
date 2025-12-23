@@ -27,6 +27,16 @@ var ImeiSampleData = map[string]*models.ImeiInfo{
 		EndIMEI:   []string{""},
 		Color:     "w",
 	},
+	"9123456789012": {
+		StartIMEI: "9123456789012 ",
+		EndIMEI:   []string{""},
+		Color:     "b",
+	},
+	"91234567895264": {
+		StartIMEI: "91234567895264",
+		EndIMEI:   []string{""},
+		Color:     "w",
+	},
 }
 
 var TacSampleData = []models.TacInfo{

@@ -24,6 +24,9 @@ func SetupRouter(eirService ports.EIRService) *gin.Engine {
 		api.GET("/equipment/:imei", handler.GetEquipment)
 		api.DELETE("/equipment/:imei", handler.DeleteEquipment)
 		api.GET("/equipment", handler.ListEquipment)
+		api.GET("/check-imei/:imei", handler.GetCheckImei)
+		api.GET("/check-tac/:imei", handler.GetCheckTac)
+		api.POST("/insert-tac", handler.PostInsertTac)
 	}
 
 	// Health check

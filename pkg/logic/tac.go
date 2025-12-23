@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"log"
+
 	"github.com/hsdfat8/eir/config"
 	"github.com/hsdfat8/eir/models"
 	"github.com/hsdfat8/eir/pkg/repository"
@@ -153,6 +155,7 @@ func fillRight(s string, pad rune) string {
 }
 
 func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.InsertTacResult {
+	log.Println("Start InsertTac")
 	config.LoadEnv()
 	tacMaxLength = utils.GetTacMaxLength()
 	if len(tacInfo.StartRangeTac) == 0 || len(tacInfo.StartRangeTac) > tacMaxLength {
@@ -190,11 +193,10 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 			TacInfo: tacInfo,
 		}
 	}
-	lengthEnd := utf8.RuneCountInString(newEnd)
-	keyRange := strings.Repeat(maxByteString, tacMaxLength-lengthEnd)
-	startRangeSearch := newStart + "-" + keyRange
+	startRangeSearch := newStart + "-" + newEnd
 
-	if _, ok := repo.Lookup(startRangeSearch); ok {
+	if lookup, ok := repo.Lookup(startRangeSearch); ok {
+		log.Println("Lookup: ", lookup)
 		return models.InsertTacResult{
 			Status:  "error",
 			Error:   "range_exist",
@@ -202,51 +204,44 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 		}
 	}
 
-	prevLink := ""
-	var listUpdate []*models.TacInfo
+	var finalPrevLink *string = nil
 	prev, ok := repo.Prev(startRangeSearch)
+	log.Println("prev: ", prev)
 	for ok {
-		if prev.EndRangeTac < newStart {
-			if prev.PrevLink != nil {
-				prev, ok = repo.Lookup(*prev.PrevLink)
-			} else {
-				break
-			}
-		} else if prev.EndRangeTac < newEnd {
-			return models.InsertTacResult{
-				Status:  "error",
-				Error:   "range_exist",
-				TacInfo: tacInfo,
-			}
-		} else if prev.EndRangeTac >= newEnd {
-			prevLink = prev.KeyTac
+		isParent := prev.StartRangeTac <= newStart && prev.EndRangeTac >= newEnd
+		isChild := newStart <= prev.StartRangeTac && newEnd >= prev.EndRangeTac
+
+		if isParent || isChild {
+			key := prev.KeyTac
+			finalPrevLink = &key
 			break
 		}
+
+		if prev.EndRangeTac < newStart {
+			key := prev.KeyTac
+			finalPrevLink = &key
+
+			if prev.PrevLink != nil && *prev.PrevLink != "" {
+				prev, ok = repo.Lookup(*prev.PrevLink)
+				continue
+			}
+			break
+		}
+
+		return models.InsertTacResult{Status: "error", Error: "range_exist", TacInfo: tacInfo}
 	}
 
+	var listUpdate []*models.TacInfo
 	next, ok := repo.Next(startRangeSearch)
+	log.Println("Next: ", next)
 	for ok {
-		if next.EndRangeTac < newEnd {
-			listUpdate = append(listUpdate, &models.TacInfo{
-				KeyTac:        next.KeyTac,
-				StartRangeTac: next.StartRangeTac,
-				EndRangeTac:   next.EndRangeTac,
-				Color:         next.Color,
-				PrevLink:      &startRangeSearch,
-			})
+		if next.StartRangeTac >= newStart && next.EndRangeTac <= newEnd {
+			newKeyPtr := startRangeSearch
+			updatedNext := *next
+			updatedNext.PrevLink = &newKeyPtr
+			listUpdate = append(listUpdate, &updatedNext)
+
 			next, ok = repo.Next(next.KeyTac)
-		} else if next.EndRangeTac == newEnd && next.StartRangeTac == newStart {
-			return models.InsertTacResult{
-				Status:  "error",
-				Error:   "range_exist",
-				TacInfo: tacInfo,
-			}
-		} else if next.EndRangeTac <= newEnd && next.StartRangeTac <= newEnd {
-			return models.InsertTacResult{
-				Status:  "error",
-				Error:   "range_exist",
-				TacInfo: tacInfo,
-			}
 		} else {
 			break
 		}
@@ -261,7 +256,7 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 		StartRangeTac: newStart,
 		EndRangeTac:   newEnd,
 		Color:         tacInfo.Color,
-		PrevLink:      &prevLink,
+		PrevLink:      finalPrevLink,
 	}
 
 	_ = repo.Save(tacInfoInsert)
