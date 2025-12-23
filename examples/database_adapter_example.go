@@ -113,8 +113,6 @@ func createMongoDBConfig() *ports.DatabaseConfig {
 
 // runDemoScenario demonstrates all database adapter features
 func runDemoScenario(ctx context.Context, adapter ports.DatabaseAdapter) {
-	log.Println("\n=== Running Demo Scenario ===\n")
-
 	imeiRepo := adapter.GetIMEIRepository()
 	auditRepo := adapter.GetAuditRepository()
 	extAuditRepo := adapter.GetExtendedAuditRepository()
@@ -319,7 +317,6 @@ func updateEquipmentWithTransaction(ctx context.Context, adapter ports.DatabaseA
 
 // runMigration demonstrates data migration between databases
 func runMigration(ctx context.Context) {
-	log.Println("\n=== Running Migration ===\n")
 
 	dbFactory := factory.NewDatabaseAdapterFactory()
 
@@ -370,7 +367,6 @@ func runMigration(ctx context.Context) {
 
 // runCleanup demonstrates data cleanup operations
 func runCleanup(ctx context.Context, adapter ports.DatabaseAdapter) {
-	log.Println("\n=== Running Cleanup ===\n")
 
 	// Delete audits older than 90 days
 	cutoffDate := time.Now().Add(-90 * 24 * time.Hour).Format("2006-01-02")
@@ -413,7 +409,6 @@ func runCleanup(ctx context.Context, adapter ports.DatabaseAdapter) {
 
 // runStatistics demonstrates statistics gathering
 func runStatistics(ctx context.Context, adapter ports.DatabaseAdapter) {
-	log.Println("\n=== Gathering Statistics ===\n")
 
 	extAuditRepo := adapter.GetExtendedAuditRepository()
 
