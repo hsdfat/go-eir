@@ -6,12 +6,7 @@ import (
 	"github.com/hsdfat8/eir/models"
 )
 
-type ImeiRepository interface {
-	Lookup(startRange string) (*models.ImeiInfo, bool)
-	Save(info *models.ImeiInfo) error
-	ListAll() []models.ImeiInfo
-	Clear()
-}
+
 
 type InMemoryImeiRepo struct {
 	data       map[string]*models.ImeiInfo

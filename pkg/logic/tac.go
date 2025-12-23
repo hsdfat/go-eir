@@ -9,8 +9,8 @@ import (
 	"log"
 
 	"github.com/hsdfat8/eir/config"
+	"github.com/hsdfat8/eir/internal/domain/ports"
 	"github.com/hsdfat8/eir/models"
-	"github.com/hsdfat8/eir/pkg/repository"
 	"github.com/hsdfat8/eir/utils"
 )
 
@@ -154,7 +154,7 @@ func fillRight(s string, pad rune) string {
 	return s + strings.Repeat(string(pad), tacMaxLength-cur)
 }
 
-func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.InsertTacResult {
+func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertTacResult {
 	log.Println("Start InsertTac")
 	config.LoadEnv()
 	tacMaxLength = utils.GetTacMaxLength()
@@ -195,7 +195,7 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 	}
 	startRangeSearch := newStart + "-" + newEnd
 
-	if lookup, ok := repo.Lookup(startRangeSearch); ok {
+	if lookup, ok := repo.LookupTacInfo(startRangeSearch); ok {
 		log.Println("Lookup: ", lookup)
 		return models.InsertTacResult{
 			Status:  "error",
@@ -205,7 +205,7 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 	}
 
 	var finalPrevLink *string = nil
-	prev, ok := repo.Prev(startRangeSearch)
+	prev, ok := repo.PrevTacInfo(startRangeSearch)
 	log.Println("prev: ", prev)
 	for ok {
 		isParent := prev.StartRangeTac <= newStart && prev.EndRangeTac >= newEnd
@@ -222,7 +222,7 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 			finalPrevLink = &key
 
 			if prev.PrevLink != nil && *prev.PrevLink != "" {
-				prev, ok = repo.Lookup(*prev.PrevLink)
+				prev, ok = repo.LookupTacInfo(*prev.PrevLink)
 				continue
 			}
 			break
@@ -231,8 +231,8 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 		return models.InsertTacResult{Status: "error", Error: "range_exist", TacInfo: tacInfo}
 	}
 
-	var listUpdate []*models.TacInfo
-	next, ok := repo.Next(startRangeSearch)
+	var listUpdate []*ports.TacInfo
+	next, ok := repo.NextTacInfo(startRangeSearch)
 	log.Println("Next: ", next)
 	for ok {
 		if next.StartRangeTac >= newStart && next.EndRangeTac <= newEnd {
@@ -241,17 +241,17 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 			updatedNext.PrevLink = &newKeyPtr
 			listUpdate = append(listUpdate, &updatedNext)
 
-			next, ok = repo.Next(next.KeyTac)
+			next, ok = repo.NextTacInfo(next.KeyTac)
 		} else {
 			break
 		}
 	}
 
 	for _, u := range listUpdate {
-		_ = repo.Save(u)
+		_ = repo.SaveTacInfo(u)
 	}
 
-	tacInfoInsert := &models.TacInfo{
+	tacInfoInsert := &ports.TacInfo{
 		KeyTac:        startRangeSearch,
 		StartRangeTac: newStart,
 		EndRangeTac:   newEnd,
@@ -259,7 +259,7 @@ func InsertTac(repo repository.TacRepository, tacInfo models.TacInfo) models.Ins
 		PrevLink:      finalPrevLink,
 	}
 
-	_ = repo.Save(tacInfoInsert)
+	_ = repo.SaveTacInfo(tacInfoInsert)
 
 	return models.InsertTacResult{
 		Status:  "ok",

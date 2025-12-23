@@ -6,9 +6,17 @@ import (
 	"github.com/hsdfat8/eir/internal/domain/models"
 )
 
+// ImeiInfo represents IMEI range information for logic operations
+type ImeiInfo struct {
+	StartIMEI string
+	EndIMEI   []string
+	Color     string
+}
+
 // IMEIRepository defines the interface for IMEI data access
 // This is a port owned by the domain layer
 type IMEIRepository interface {
+	// Persistence operations for Equipment
 	// GetByIMEI retrieves equipment information by IMEI
 	GetByIMEI(ctx context.Context, imei string) (*models.Equipment, error)
 
@@ -32,6 +40,18 @@ type IMEIRepository interface {
 
 	// IncrementCheckCount atomically increments the check counter and updates last check time
 	IncrementCheckCount(ctx context.Context, imei string) error
+
+	// IMEI logic operations (for pkg/logic integration)
+	LookupImeiInfo(startRange string) (*ImeiInfo, bool)
+	SaveImeiInfo(info *ImeiInfo) error
+	ListAllImeiInfo() []ImeiInfo
+	ClearImeiInfo()
+
+	// TAC logic operations (for pkg/logic integration)
+	SaveTacInfo(info *TacInfo) error
+	LookupTacInfo(key string) (*TacInfo, bool)
+	PrevTacInfo(key string) (*TacInfo, bool)
+	NextTacInfo(key string) (*TacInfo, bool)
 }
 
 // AuditRepository defines the interface for audit logging

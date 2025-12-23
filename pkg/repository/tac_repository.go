@@ -6,13 +6,7 @@ import (
 	"github.com/hsdfat8/eir/models"
 )
 
-type TacRepository interface {
-	Save(tac *models.TacInfo) error
-	Lookup(key string) (*models.TacInfo, bool)
-	Prev(key string) (*models.TacInfo, bool)
-	Next(key string) (*models.TacInfo, bool)
-	ListAll() []*models.TacInfo
-}
+
 
 type InMemoryTacRepo struct {
 	data map[string]*models.TacInfo

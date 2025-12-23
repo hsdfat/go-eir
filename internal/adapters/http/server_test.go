@@ -12,72 +12,55 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hsdfat8/eir/internal/adapters/memory"
 	"github.com/hsdfat8/eir/internal/adapters/testutil"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/domain/service"
-	"github.com/hsdfat8/eir/pkg/repository"
-	"github.com/hsdfat8/eir/utils"
+	legacyModels "github.com/hsdfat8/eir/models"
+	"github.com/hsdfat8/eir/pkg/logic"
 	"golang.org/x/net/http2"
 )
 
 // mockEIRService is a mock implementation of EIRService for testing
 type mockEIRService struct {
-	imeiLogic     *service.ImeiLogicService
-	tacLogic      *service.TacLogicService
-	imeiRepo      repository.ImeiRepository
-	tacRepo       repository.TacRepository
+	imeiRepo      ports.IMEIRepository
 	insertedTacs  []ports.TacInfo
 	insertedImeis []string
 }
 
-// newMockEIRService creates a properly initialized mock service with sample data
+// newMockEIRService creates a properly initialized mock service
 func newMockEIRService() *mockEIRService {
-	// Get configuration values from utils
-	imeiCheckLength := utils.GetImeiCheckLength()
-	imeiMaxLength := utils.GetImeiMaxLength()
-	tacMaxLength := utils.GetTacMaxLength()
-
-	// Initialize repositories
-	imeiRepo := repository.NewInMemoryImeiRepo()
-	tacRepo := repository.NewInMemoryTacRepo()
-
-	// Initialize logic services with sample data from utils
-	imeiLogic := service.NewImeiLogicService(imeiCheckLength, imeiMaxLength, imeiRepo, utils.ImeiSampleData)
-	tacLogic := service.NewTacLogicService(tacMaxLength, tacRepo, utils.TacSampleData)
-
 	return &mockEIRService{
-		imeiLogic: imeiLogic,
-		tacLogic:  tacLogic,
-		imeiRepo:  imeiRepo,
-		tacRepo:   tacRepo,
+		imeiRepo: memory.NewInMemoryIMEIRepository(),
 	}
 }
 
 func (m *mockEIRService) CheckImei(ctx context.Context, imei string, status models.SystemStatus) (*ports.CheckImeiResult, error) {
-	// Initialize if needed (for backward compatibility with existing tests)
-	if m.imeiLogic == nil {
-		imeiCheckLength := utils.GetImeiCheckLength()
-		imeiMaxLength := utils.GetImeiMaxLength()
-		m.imeiRepo = repository.NewInMemoryImeiRepo()
-		m.imeiLogic = service.NewImeiLogicService(imeiCheckLength, imeiMaxLength, m.imeiRepo, utils.ImeiSampleData)
+	// Convert domain model to legacy model
+	legacyStatus := legacyModels.SystemStatus{
+		OverloadLevel: status.OverloadLevel,
+		TPSOverload:   status.TPSOverload,
 	}
 
-	// Use IMEI logic service with sample data
-	result := m.imeiLogic.CheckImei(imei, status)
-	return &result, nil
+	// Use pkg/logic for IMEI checking
+	result := logic.CheckImei(imei, legacyStatus)
+
+	return &ports.CheckImeiResult{
+		Status: result.Status,
+		IMEI:   result.IMEI,
+		Color:  result.Color,
+	}, nil
 }
 
 func (m *mockEIRService) CheckTac(ctx context.Context, imei string, status models.SystemStatus) (*ports.CheckTacResult, error) {
-	// Initialize if needed (for backward compatibility with existing tests)
-	if m.tacLogic == nil {
-		tacMaxLength := utils.GetTacMaxLength()
-		m.tacRepo = repository.NewInMemoryTacRepo()
-		m.tacLogic = service.NewTacLogicService(tacMaxLength, m.tacRepo, utils.TacSampleData)
+	// Convert domain model to legacy model
+	legacyStatus := legacyModels.SystemStatus{
+		OverloadLevel: status.OverloadLevel,
+		TPSOverload:   status.TPSOverload,
 	}
 
-	// Use TAC logic service with sample data
-	result, tacInfo := m.tacLogic.CheckTac(imei)
+	// Use pkg/logic for TAC checking
+	result, tacInfo := logic.CheckTac(imei, legacyStatus)
 
 	var tacInfoPtr *ports.TacInfo
 	if result.Status == "ok" {
@@ -99,16 +82,14 @@ func (m *mockEIRService) CheckTac(ctx context.Context, imei string, status model
 }
 
 func (m *mockEIRService) InsertImei(ctx context.Context, imei string, color string, status models.SystemStatus) (*ports.InsertImeiResult, error) {
-	// Initialize if needed (for backward compatibility with existing tests)
-	if m.imeiLogic == nil {
-		imeiCheckLength := utils.GetImeiCheckLength()
-		imeiMaxLength := utils.GetImeiMaxLength()
-		m.imeiRepo = repository.NewInMemoryImeiRepo()
-		m.imeiLogic = service.NewImeiLogicService(imeiCheckLength, imeiMaxLength, m.imeiRepo, utils.ImeiSampleData)
+	// Convert domain model to legacy model
+	legacyStatus := legacyModels.SystemStatus{
+		OverloadLevel: status.OverloadLevel,
+		TPSOverload:   status.TPSOverload,
 	}
 
-	// Use IMEI logic service for insertion
-	result := m.imeiLogic.InsertImei(imei, color, status)
+	// Use pkg/logic for IMEI insertion with the imeiRepo
+	result := logic.InsertImei(m.imeiRepo, imei, color, legacyStatus)
 
 	// Track inserted IMEIs
 	if m.insertedImeis == nil {
@@ -118,29 +99,74 @@ func (m *mockEIRService) InsertImei(ctx context.Context, imei string, color stri
 		m.insertedImeis = append(m.insertedImeis, imei)
 	}
 
-	return &result, nil
+	errorPtr := (*string)(nil)
+	if result.Error != "" {
+		errorPtr = &result.Error
+	}
+
+	return &ports.InsertImeiResult{
+		Status: result.Status,
+		IMEI:   result.IMEI,
+		Error:  errorPtr,
+	}, nil
 }
 
 func (m *mockEIRService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) (*ports.InsertTacResult, error) {
-	// Initialize if needed (for backward compatibility with existing tests)
-	if m.tacLogic == nil {
-		tacMaxLength := utils.GetTacMaxLength()
-		m.tacRepo = repository.NewInMemoryTacRepo()
-		m.tacLogic = service.NewTacLogicService(tacMaxLength, m.tacRepo, utils.TacSampleData)
+	if tacInfo == nil {
+		errStr := "invalid_parameter"
+		return &ports.InsertTacResult{
+			Status: "error",
+			Error:  &errStr,
+		}, fmt.Errorf("tacInfo is required")
 	}
 
-	// Use TAC logic service for insertion
-	result := m.tacLogic.InsertTac(*tacInfo)
+	// Convert domain TAC info to legacy model
+	legacyTacInfo := legacyModels.TacInfo{
+		KeyTac:        tacInfo.KeyTac,
+		StartRangeTac: tacInfo.StartRangeTac,
+		EndRangeTac:   tacInfo.EndRangeTac,
+		Color:         tacInfo.Color,
+		PrevLink:      tacInfo.PrevLink,
+	}
+
+	// Use pkg/logic for TAC insertion with the imeiRepo
+	result := logic.InsertTac(m.imeiRepo, legacyTacInfo)
 
 	// Track inserted TACs
 	if m.insertedTacs == nil {
 		m.insertedTacs = []ports.TacInfo{}
 	}
-	if result.TacInfo != nil {
-		m.insertedTacs = append(m.insertedTacs, *result.TacInfo)
+	if result.TacInfo.KeyTac != "" {
+		m.insertedTacs = append(m.insertedTacs, ports.TacInfo{
+			KeyTac:        result.TacInfo.KeyTac,
+			StartRangeTac: result.TacInfo.StartRangeTac,
+			EndRangeTac:   result.TacInfo.EndRangeTac,
+			Color:         result.TacInfo.Color,
+			PrevLink:      result.TacInfo.PrevLink,
+		})
 	}
 
-	return &result, nil
+	var resultTacInfo *ports.TacInfo
+	if result.TacInfo.KeyTac != "" {
+		resultTacInfo = &ports.TacInfo{
+			KeyTac:        result.TacInfo.KeyTac,
+			StartRangeTac: result.TacInfo.StartRangeTac,
+			EndRangeTac:   result.TacInfo.EndRangeTac,
+			Color:         result.TacInfo.Color,
+			PrevLink:      result.TacInfo.PrevLink,
+		}
+	}
+
+	errorPtr := (*string)(nil)
+	if result.Error != "" {
+		errorPtr = &result.Error
+	}
+
+	return &ports.InsertTacResult{
+		Status:  result.Status,
+		Error:   errorPtr,
+		TacInfo: resultTacInfo,
+	}, nil
 }
 
 func (m *mockEIRService) RemoveEquipment(ctx context.Context, imei string) error {
@@ -164,7 +190,7 @@ func TestServerHTTP1Basic(t *testing.T) {
 		ListenAddr: "127.0.0.1:8080", // Standard HTTP port
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -198,7 +224,7 @@ func TestServerHTTP1WithPCAP(t *testing.T) {
 		EnableH2C:  false,            // Use HTTP/1.1 for easier Wireshark decoding
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -315,7 +341,7 @@ func TestServerH2C(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -434,7 +460,7 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -518,7 +544,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 		ShutdownTimeout: 5 * time.Second,
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -552,7 +578,7 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -603,8 +629,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if result.Status != models.EquipmentStatusWhitelisted {
-			t.Errorf("Expected status ok, got %s", result.Status)
+		if result.Status != models.EquipmentStatusBlacklisted {
+			t.Errorf("Expected status %s, got %s", models.EquipmentStatusBlacklisted, result.Status)
 		}
 
 		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
@@ -631,8 +657,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if result.Status != models.EquipmentStatusWhitelisted {
-			t.Errorf("Expected status ok, got %s", result.Status)
+		if result.Status != models.EquipmentStatusGreylisted {
+			t.Errorf("Expected status %s, got %s", models.EquipmentStatusGreylisted, result.Status)
 		}
 
 		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
@@ -659,8 +685,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 			t.Fatalf("Failed to decode response: %v", err)
 		}
 
-		if result.Status != models.EquipmentStatusWhitelisted {
-			t.Errorf("Expected status ok, got %s", result.Status)
+		if result.Status != models.EquipmentStatusBlacklisted {
+			t.Errorf("Expected status %s, got %s", models.EquipmentStatusBlacklisted, result.Status)
 		}
 
 		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
@@ -755,7 +781,7 @@ func TestInsertTacWithPCAP(t *testing.T) {
 		EnableH2C:  true, // Enable HTTP/2 Cleartext
 	}
 
-	mockService := &mockEIRService{}
+	mockService := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {

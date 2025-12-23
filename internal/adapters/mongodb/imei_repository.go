@@ -187,3 +187,37 @@ func (r *imeiRepository) IncrementCheckCount(ctx context.Context, imei string) e
 
 	return nil
 }
+
+// IMEI logic operations (not implemented for MongoDB - use in-memory for testing)
+func (r *imeiRepository) LookupImeiInfo(startRange string) (*ports.ImeiInfo, bool) {
+	return nil, false
+}
+
+func (r *imeiRepository) SaveImeiInfo(info *ports.ImeiInfo) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (r *imeiRepository) ListAllImeiInfo() []ports.ImeiInfo {
+	return []ports.ImeiInfo{}
+}
+
+func (r *imeiRepository) ClearImeiInfo() {
+	// No-op
+}
+
+// TAC logic operations (not implemented for MongoDB - use in-memory for testing)
+func (r *imeiRepository) SaveTacInfo(info *ports.TacInfo) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (r *imeiRepository) LookupTacInfo(key string) (*ports.TacInfo, bool) {
+	return nil, false
+}
+
+func (r *imeiRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) {
+	return nil, false
+}
+
+func (r *imeiRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
+	return nil, false
+}

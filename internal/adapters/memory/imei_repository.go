@@ -11,15 +11,20 @@ import (
 
 // InMemoryIMEIRepository is an in-memory implementation for testing
 type InMemoryIMEIRepository struct {
-	mu         sync.RWMutex
-	equipment  map[string]*models.Equipment
-	nextID     int64
+	mu        sync.RWMutex
+	equipment map[string]*models.Equipment
+	nextID    int64
+	// For IMEI/TAC logic operations
+	imeiData map[string]*ports.ImeiInfo
+	tacData  map[string]*ports.TacInfo
 }
 
 // NewInMemoryIMEIRepository creates a new in-memory IMEI repository
 func NewInMemoryIMEIRepository() ports.IMEIRepository {
 	return &InMemoryIMEIRepository{
 		equipment: make(map[string]*models.Equipment),
+		imeiData:  make(map[string]*ports.ImeiInfo),
+		tacData:   make(map[string]*ports.TacInfo),
 		nextID:    1,
 	}
 }
@@ -131,4 +136,81 @@ func (r *InMemoryIMEIRepository) IncrementCheckCount(ctx context.Context, imei s
 		return nil
 	}
 	return fmt.Errorf("equipment not found")
+}
+
+// IMEI logic operations
+func (r *InMemoryIMEIRepository) LookupImeiInfo(startRange string) (*ports.ImeiInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	info, ok := r.imeiData[startRange]
+	return info, ok
+}
+
+func (r *InMemoryIMEIRepository) SaveImeiInfo(info *ports.ImeiInfo) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.imeiData[info.StartIMEI] = info
+	return nil
+}
+
+func (r *InMemoryIMEIRepository) ListAllImeiInfo() []ports.ImeiInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]ports.ImeiInfo, 0, len(r.imeiData))
+	for _, info := range r.imeiData {
+		result = append(result, *info)
+	}
+	return result
+}
+
+func (r *InMemoryIMEIRepository) ClearImeiInfo() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.imeiData = make(map[string]*ports.ImeiInfo)
+}
+
+// TAC logic operations
+func (r *InMemoryIMEIRepository) SaveTacInfo(info *ports.TacInfo) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.tacData[info.KeyTac] = info
+	return nil
+}
+
+func (r *InMemoryIMEIRepository) LookupTacInfo(key string) (*ports.TacInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	info, ok := r.tacData[key]
+	return info, ok
+}
+
+func (r *InMemoryIMEIRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if info, ok := r.tacData[key]; ok && info.PrevLink != nil {
+		if prevInfo, exists := r.tacData[*info.PrevLink]; exists {
+			return prevInfo, true
+		}
+	}
+	return nil, false
+}
+
+func (r *InMemoryIMEIRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Find the TAC that has this key as its PrevLink
+	for _, info := range r.tacData {
+		if info.PrevLink != nil && *info.PrevLink == key {
+			return info, true
+		}
+	}
+	return nil, false
 }

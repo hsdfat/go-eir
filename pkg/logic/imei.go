@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/hsdfat8/eir/config"
+	"github.com/hsdfat8/eir/internal/domain/ports"
 	"github.com/hsdfat8/eir/models"
-	"github.com/hsdfat8/eir/pkg/repository"
 	"github.com/hsdfat8/eir/utils"
 )
 
@@ -104,7 +104,7 @@ func normalizeImeiForInsert(imei string) (start string, end string) {
 	return
 }
 
-func InsertImei(repo repository.ImeiRepository, imei string, color string, status models.SystemStatus) models.InsertImeiResult {
+func InsertImei(repo ports.IMEIRepository, imei string, color string, status models.SystemStatus) models.InsertImeiResult {
 
 	config.LoadEnv()
 	imeiMaxLength = utils.GetImeiMaxLength()
@@ -127,7 +127,7 @@ func InsertImei(repo repository.ImeiRepository, imei string, color string, statu
 	}
 
 	start, end := normalizeImeiForInsert(imei)
-	if info, ok := repo.Lookup(start); ok {
+	if info, ok := repo.LookupImeiInfo(start); ok {
 		if info.Color != color {
 			return models.InsertImeiResult{
 				Status: "error",
@@ -152,14 +152,14 @@ func InsertImei(repo repository.ImeiRepository, imei string, color string, statu
 			info.EndIMEI = append(info.EndIMEI, end)
 		}
 
-		_ = repo.Save(info)
+		_ = repo.SaveImeiInfo(info)
 		return models.InsertImeiResult{
 			Status: "ok",
 			IMEI:   imei,
 		}
 	}
 
-	_ = repo.Save(&models.ImeiInfo{
+	_ = repo.SaveImeiInfo(&ports.ImeiInfo{
 		StartIMEI: start,
 		EndIMEI:   []string{end},
 		Color:     color,

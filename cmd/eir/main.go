@@ -9,7 +9,7 @@ import (
 
 	"github.com/hsdfat8/eir/internal/adapters/diameter"
 	httpAdapter "github.com/hsdfat8/eir/internal/adapters/http"
-	"github.com/hsdfat8/eir/internal/adapters/postgres"
+	"github.com/hsdfat8/eir/internal/adapters/memory"
 	"github.com/hsdfat8/eir/internal/config"
 	"github.com/hsdfat8/eir/internal/domain/service"
 )
@@ -21,36 +21,16 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Initialize PostgreSQL database
-	dbConfig := postgres.Config{
-		Host:            cfg.Database.Host,
-		Port:            cfg.Database.Port,
-		User:            cfg.Database.User,
-		Password:        cfg.Database.Password,
-		Database:        cfg.Database.Database,
-		SSLMode:         cfg.Database.SSLMode,
-		MaxOpenConns:    cfg.Database.MaxOpenConns,
-		MaxIdleConns:    cfg.Database.MaxIdleConns,
-		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
-		ConnMaxIdleTime: cfg.Database.ConnMaxIdleTime,
-	}
+	// Initialize persistence repositories
+	imeiRepo := memory.NewInMemoryIMEIRepository()
+	auditRepo := memory.NewInMemoryAuditRepository()
 
-	db, err := postgres.NewDB(dbConfig)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer db.Close()
-
-	log.Println("✓ Connected to PostgreSQL database")
-
-	// Initialize repositories
-	imeiRepo := postgres.NewIMEIRepository(db)
-	auditRepo := postgres.NewAuditRepository(db)
+	log.Println("✓ Repositories initialized")
 
 	// Initialize cache (optional, nil if disabled)
 	// TODO: Implement Redis cache adapter if cfg.Cache.Enabled
 
-	// Initialize EIR service
+	// Initialize EIR service with persistence repositories
 	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
 
 	log.Println("✓ EIR service initialized")
