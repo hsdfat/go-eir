@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,20 +11,24 @@ import (
 	"github.com/hsdfat8/eir/internal/adapters/memory"
 	"github.com/hsdfat8/eir/internal/config"
 	"github.com/hsdfat8/eir/internal/domain/service"
+	"github.com/hsdfat8/eir/internal/observability"
 )
 
 func main() {
+	// Initialize logger
+	logger := observability.New("eir-main", "info")
+
 	// Load configuration
 	cfg, err := config.Load("")
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Fatalw("Failed to load configuration", "error", err)
 	}
 
 	// Initialize persistence repositories
 	imeiRepo := memory.NewInMemoryIMEIRepository()
 	auditRepo := memory.NewInMemoryAuditRepository()
 
-	log.Println("✓ Repositories initialized")
+	logger.Info("✓ Repositories initialized")
 
 	// Initialize cache (optional, nil if disabled)
 	// TODO: Implement Redis cache adapter if cfg.Cache.Enabled
@@ -33,7 +36,7 @@ func main() {
 	// Initialize EIR service with persistence repositories
 	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
 
-	log.Println("✓ EIR service initialized")
+	logger.Info("✓ EIR service initialized")
 
 	// Initialize HTTP/2 server
 	httpServerConfig := httpAdapter.ServerConfig{
@@ -52,10 +55,10 @@ func main() {
 
 	// Start HTTP/2 server
 	if err := httpServer.Start(); err != nil {
-		log.Fatalf("Failed to start HTTP server: %v", err)
+		logger.Fatalw("Failed to start HTTP server", "error", err)
 	}
 
-	log.Printf("✓ HTTP/2 server listening on %s", httpServer.GetAddr())
+	logger.Infow("✓ HTTP/2 server listening", "address", httpServer.GetAddr())
 
 	// Initialize Diameter S13 server
 	diameterConfig := diameter.ServerConfig{
@@ -70,27 +73,27 @@ func main() {
 
 	// Start Diameter server
 	if err := diameterServer.Start(); err != nil {
-		log.Fatalf("Failed to start Diameter server: %v", err)
+		logger.Fatalw("Failed to start Diameter server", "error", err)
 	}
 
-	log.Println("✓ Diameter S13 server started")
+	logger.Info("✓ Diameter S13 server started")
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down servers...")
+	logger.Info("Shutting down servers...")
 
 	// Shutdown HTTP/2 server
 	if err := httpServer.Stop(); err != nil {
-		log.Printf("HTTP server shutdown error: %v", err)
+		logger.Errorw("HTTP server shutdown error", "error", err)
 	}
 
 	// Shutdown Diameter server
 	if err := diameterServer.Stop(); err != nil {
-		log.Printf("Diameter server shutdown error: %v", err)
+		logger.Errorw("Diameter server shutdown error", "error", err)
 	}
 
-	log.Println("Servers stopped gracefully")
+	logger.Info("Servers stopped gracefully")
 }

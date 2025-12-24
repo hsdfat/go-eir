@@ -6,10 +6,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"log"
-
 	"github.com/hsdfat8/eir/config"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/observability"
 	"github.com/hsdfat8/eir/models"
 	"github.com/hsdfat8/eir/utils"
 )
@@ -155,7 +154,7 @@ func fillRight(s string, pad rune) string {
 }
 
 func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertTacResult {
-	log.Println("Start InsertTac")
+	observability.Log.Debug("Start InsertTac")
 	config.LoadEnv()
 	tacMaxLength = utils.GetTacMaxLength()
 	if len(tacInfo.StartRangeTac) == 0 || len(tacInfo.StartRangeTac) > tacMaxLength {
@@ -196,7 +195,7 @@ func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertT
 	startRangeSearch := newStart + "-" + newEnd
 
 	if lookup, ok := repo.LookupTacInfo(startRangeSearch); ok {
-		log.Println("Lookup: ", lookup)
+		observability.Log.Debugw("Lookup result", "lookup", lookup)
 		return models.InsertTacResult{
 			Status:  "error",
 			Error:   "range_exist",
@@ -206,7 +205,7 @@ func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertT
 
 	var finalPrevLink *string = nil
 	prev, ok := repo.PrevTacInfo(startRangeSearch)
-	log.Println("prev: ", prev)
+	observability.Log.Debugw("Previous TAC info", "prev", prev)
 	for ok {
 		isParent := prev.StartRangeTac <= newStart && prev.EndRangeTac >= newEnd
 		isChild := newStart <= prev.StartRangeTac && newEnd >= prev.EndRangeTac
@@ -233,7 +232,7 @@ func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertT
 
 	var listUpdate []*ports.TacInfo
 	next, ok := repo.NextTacInfo(startRangeSearch)
-	log.Println("Next: ", next)
+	observability.Log.Debugw("Next TAC info", "next", next)
 	for ok {
 		if next.StartRangeTac >= newStart && next.EndRangeTac <= newEnd {
 			newKeyPtr := startRangeSearch

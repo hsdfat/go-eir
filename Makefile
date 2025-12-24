@@ -1,10 +1,13 @@
-.PHONY: build run test clean docker-build docker-up docker-down db-migrate help
+.PHONY: build run test clean docker-build docker-up docker-down db-migrate help migrate migrate-verify migrate-status build-migrate migrate-create-partition
 
 # Application name
 APP_NAME = eir
 
 # Build directory
 BUILD_DIR = bin
+
+# Database configuration
+DATABASE_URL ?= "host=14.225.198.206 user=adong password=adong123 dbname=adongfoodv4 port=5432 sslmode=disable"
 
 # Go parameters
 GOCMD = go
@@ -19,18 +22,22 @@ LDFLAGS = -ldflags="-w -s"
 ## help: Display this help message
 help:
 	@echo "Available targets:"
-	@echo "  build         - Build the application binary"
-	@echo "  run           - Run the application locally"
-	@echo "  test          - Run unit tests"
-	@echo "  test-coverage - Run tests with coverage report"
-	@echo "  clean         - Remove build artifacts"
-	@echo "  docker-build  - Build Docker image"
-	@echo "  docker-up     - Start all services with Docker Compose"
-	@echo "  docker-down   - Stop all services"
-	@echo "  db-migrate    - Apply database migrations"
-	@echo "  fmt           - Format Go code"
-	@echo "  lint          - Run golangci-lint"
-	@echo "  deps          - Download and tidy dependencies"
+	@echo "  build                  - Build the application binary"
+	@echo "  run                    - Run the application locally"
+	@echo "  test                   - Run unit tests"
+	@echo "  test-coverage          - Run tests with coverage report"
+	@echo "  clean                  - Remove build artifacts"
+	@echo "  docker-build           - Build Docker image"
+	@echo "  docker-up              - Start all services with Docker Compose"
+	@echo "  docker-down            - Stop all services"
+	@echo "  build-migrate          - Build the migration tool"
+	@echo "  migrate                - Run database auto-migration"
+	@echo "  migrate-verify         - Run migration and verify schema"
+	@echo "  migrate-status         - Show migration status"
+	@echo "  migrate-create-partition - Create partitions for a year (e.g., YEAR=2027)"
+	@echo "  fmt                    - Format Go code"
+	@echo "  lint                   - Run golangci-lint"
+	@echo "  deps                   - Download and tidy dependencies"
 
 ## build: Build the application binary
 build:
@@ -81,11 +88,32 @@ docker-down:
 	@docker-compose down
 	@echo "Services stopped"
 
-## db-migrate: Apply database migrations
-db-migrate:
-	@echo "Applying database migrations..."
-	@psql -h localhost -U eir -d eir -f internal/adapters/postgres/schema.sql
-	@echo "Migrations complete"
+## build-migrate: Build the migration tool
+build-migrate:
+	@echo "Building migration tool..."
+	@mkdir -p $(BUILD_DIR)
+	@$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/migrate ./cmd/migrate
+	@echo "Migration tool built: $(BUILD_DIR)/migrate"
+
+## migrate: Run database auto-migration
+migrate: build-migrate
+	@echo "Running database migration with auto-migrate..."
+	@./$(BUILD_DIR)/migrate -database-url=$(DATABASE_URL)
+
+## migrate-verify: Run migration and verify schema
+migrate-verify: build-migrate
+	@echo "Running database migration with verification..."
+	@./$(BUILD_DIR)/migrate -database-url=$(DATABASE_URL) -verify
+
+## migrate-status: Show migration status
+migrate-status: build-migrate
+	@echo "Checking migration status..."
+	@./$(BUILD_DIR)/migrate -database-url=$(DATABASE_URL) -status
+
+## migrate-create-partition: Create partitions for a specific year
+migrate-create-partition: build-migrate
+	@echo "Creating partitions for year $(YEAR)..."
+	@./$(BUILD_DIR)/migrate -database-url=$(DATABASE_URL) -create-partition=$(YEAR)
 
 ## fmt: Format Go code
 fmt:

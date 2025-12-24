@@ -4,15 +4,18 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/hsdfat8/eir/internal/adapters/factory"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/observability"
 )
 
+var logger = observability.New("database-adapter-example", "info")
+
 func main() {
+
 	// Parse command-line flags
 	dbType := flag.String("db", "postgres", "Database type: postgres or mongodb")
 	action := flag.String("action", "demo", "Action to perform: demo, migrate, cleanup, stats")
@@ -28,33 +31,33 @@ func main() {
 	case "mongodb":
 		config = createMongoDBConfig()
 	default:
-		log.Fatalf("Unsupported database type: %s", *dbType)
+		logger.Fatalw("Unsupported database type", "type", *dbType)
 	}
 
 	// Create and connect adapter
 	dbFactory := factory.NewDatabaseAdapterFactory()
 
 	if err := dbFactory.ValidateConfig(config); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+		logger.Fatalw("Invalid configuration: %v", err)
 	}
 
 	adapter, err := dbFactory.CreateAndConnectAdapter(ctx, config)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatalw("Failed to connect to database: %v", err)
 	}
 	defer adapter.Disconnect(ctx)
 
-	log.Printf("✓ Connected to %s database", adapter.GetType())
+	logger.Infof("✓ Connected to %s database", adapter.GetType())
 
 	// Perform health check
 	if err := adapter.HealthCheck(ctx); err != nil {
-		log.Fatalf("Health check failed: %v", err)
+		logger.Fatalw("Health check failed: %v", err)
 	}
-	log.Printf("✓ Health check passed")
+	logger.Infof("✓ Health check passed")
 
 	// Print connection stats
 	stats := adapter.GetConnectionStats()
-	log.Printf("✓ Connection stats: %d/%d connections (healthy: %v)",
+	logger.Infof("✓ Connection stats: %d/%d connections (healthy: %v)",
 		stats.OpenConnections, stats.MaxConnections, stats.Healthy)
 
 	// Execute action
@@ -68,7 +71,7 @@ func main() {
 	case "stats":
 		runStatistics(ctx, adapter)
 	default:
-		log.Fatalf("Unknown action: %s", *action)
+		logger.Fatalw("Unknown action: %s", *action)
 	}
 }
 
@@ -120,7 +123,7 @@ func runDemoScenario(ctx context.Context, adapter ports.DatabaseAdapter) {
 	snapshotRepo := adapter.GetSnapshotRepository()
 
 	// 1. Create equipment
-	log.Println("1. Creating equipment...")
+	logger.Info("1. Creating equipment...")
 	equipment := &models.Equipment{
 		IMEI:             "123456789012345",
 		Status:           models.EquipmentStatusWhitelisted,
@@ -133,15 +136,15 @@ func runDemoScenario(ctx context.Context, adapter ports.DatabaseAdapter) {
 	}
 
 	if err := imeiRepo.Create(ctx, equipment); err != nil {
-		log.Printf("  ⚠ Equipment already exists or error: %v", err)
+		logger.Infof("  ⚠ Equipment already exists or error: %v", err)
 		// Try to get existing
 		equipment, _ = imeiRepo.GetByIMEI(ctx, "123456789012345")
 	} else {
-		log.Printf("  ✓ Created equipment ID: %d", equipment.ID)
+		logger.Infof("  ✓ Created equipment ID: %d", equipment.ID)
 	}
 
 	// 2. Perform equipment checks with basic audit
-	log.Println("\n2. Performing equipment checks with audit logging...")
+	logger.Info("\n2. Performing equipment checks with audit logging...")
 	for i := 0; i < 3; i++ {
 		audit := &models.AuditLog{
 			IMEI:          equipment.IMEI,
@@ -154,21 +157,21 @@ func runDemoScenario(ctx context.Context, adapter ports.DatabaseAdapter) {
 		}
 
 		if err := auditRepo.LogCheck(ctx, audit); err != nil {
-			log.Printf("  ✗ Failed to log audit: %v", err)
+			logger.Infof("  ✗ Failed to log audit: %v", err)
 		} else {
-			log.Printf("  ✓ Logged check #%d (audit ID: %d)", i+1, audit.ID)
+			logger.Infof("  ✓ Logged check #%d (audit ID: %d)", i+1, audit.ID)
 		}
 
 		// Increment check count
 		if err := imeiRepo.IncrementCheckCount(ctx, equipment.IMEI); err != nil {
-			log.Printf("  ✗ Failed to increment count: %v", err)
+			logger.Infof("  ✗ Failed to increment count: %v", err)
 		}
 
 		time.Sleep(100 * time.Millisecond)
 	}
 
 	// 3. Extended audit with metrics
-	log.Println("\n3. Performing extended audit with metrics...")
+	logger.Info("\n3. Performing extended audit with metrics...")
 	startTime := time.Now()
 	time.Sleep(50 * time.Millisecond) // Simulate processing
 	processingTime := time.Since(startTime).Milliseconds()
@@ -199,13 +202,13 @@ func runDemoScenario(ctx context.Context, adapter ports.DatabaseAdapter) {
 	}
 
 	if err := extAuditRepo.LogCheckExtended(ctx, extAudit); err != nil {
-		log.Printf("  ✗ Failed to log extended audit: %v", err)
+		logger.Infof("  ✗ Failed to log extended audit: %v", err)
 	} else {
-		log.Printf("  ✓ Logged extended audit (processing time: %d ms)", processingTime)
+		logger.Infof("  ✓ Logged extended audit (processing time: %d ms)", processingTime)
 	}
 
 	// 4. Create snapshot
-	log.Println("\n4. Creating equipment snapshot...")
+	logger.Info("\n4. Creating equipment snapshot...")
 	snapshot := &models.EquipmentSnapshot{
 		EquipmentID:  equipment.ID,
 		IMEI:         equipment.IMEI,
@@ -219,59 +222,59 @@ func runDemoScenario(ctx context.Context, adapter ports.DatabaseAdapter) {
 	}
 
 	if err := snapshotRepo.CreateSnapshot(ctx, snapshot); err != nil {
-		log.Printf("  ✗ Failed to create snapshot: %v", err)
+		logger.Infof("  ✗ Failed to create snapshot: %v", err)
 	} else {
-		log.Printf("  ✓ Created snapshot ID: %d", snapshot.ID)
+		logger.Infof("  ✓ Created snapshot ID: %d", snapshot.ID)
 	}
 
 	// 5. Update equipment status with transaction
-	log.Println("\n5. Updating equipment status (with transaction)...")
+	logger.Info("\n5. Updating equipment status (with transaction)...")
 	if err := updateEquipmentWithTransaction(ctx, adapter, equipment.IMEI, models.EquipmentStatusGreylisted); err != nil {
-		log.Printf("  ✗ Failed to update: %v", err)
+		logger.Infof("  ✗ Failed to update: %v", err)
 	} else {
-		log.Printf("  ✓ Updated equipment status to GREYLISTED")
+		logger.Infof("  ✓ Updated equipment status to GREYLISTED")
 	}
 
 	// 6. Query audit history
-	log.Println("\n6. Querying audit history...")
+	logger.Info("\n6. Querying audit history...")
 	audits, err := auditRepo.GetAuditsByIMEI(ctx, equipment.IMEI, 0, 10)
 	if err != nil {
-		log.Printf("  ✗ Failed to query audits: %v", err)
+		logger.Infof("  ✗ Failed to query audits: %v", err)
 	} else {
-		log.Printf("  ✓ Found %d audit entries", len(audits))
+		logger.Infof("  ✓ Found %d audit entries", len(audits))
 		for i, audit := range audits {
-			log.Printf("    [%d] %s - Status: %s, Source: %s",
+			logger.Infof("    [%d] %s - Status: %s, Source: %s",
 				i+1, audit.CheckTime.Format("2006-01-02 15:04:05"),
 				audit.Status, audit.RequestSource)
 		}
 	}
 
 	// 7. Query change history
-	log.Println("\n7. Querying change history...")
+	logger.Info("\n7. Querying change history...")
 	history, err := historyRepo.GetHistoryByIMEI(ctx, equipment.IMEI, 0, 10)
 	if err != nil {
-		log.Printf("  ✗ Failed to query history: %v", err)
+		logger.Infof("  ✗ Failed to query history: %v", err)
 	} else {
-		log.Printf("  ✓ Found %d change history entries", len(history))
+		logger.Infof("  ✓ Found %d change history entries", len(history))
 		for i, h := range history {
-			log.Printf("    [%d] %s - Type: %s, By: %s",
+			logger.Infof("    [%d] %s - Type: %s, By: %s",
 				i+1, h.ChangedAt.Format("2006-01-02 15:04:05"),
 				h.ChangeType, h.ChangedBy)
 		}
 	}
 
 	// 8. Get equipment with updated info
-	log.Println("\n8. Retrieving updated equipment...")
+	logger.Info("\n8. Retrieving updated equipment...")
 	updatedEquipment, err := imeiRepo.GetByIMEI(ctx, equipment.IMEI)
 	if err != nil {
-		log.Printf("  ✗ Failed to retrieve: %v", err)
+		logger.Infof("  ✗ Failed to retrieve: %v", err)
 	} else {
-		log.Printf("  ✓ Equipment Status: %s", updatedEquipment.Status)
-		log.Printf("  ✓ Check Count: %d", updatedEquipment.CheckCount)
-		log.Printf("  ✓ Last Updated: %s", updatedEquipment.LastUpdated.Format("2006-01-02 15:04:05"))
+		logger.Infof("  ✓ Equipment Status: %s", updatedEquipment.Status)
+		logger.Infof("  ✓ Check Count: %d", updatedEquipment.CheckCount)
+		logger.Infof("  ✓ Last Updated: %s", updatedEquipment.LastUpdated.Format("2006-01-02 15:04:05"))
 	}
 
-	log.Println("\n=== Demo Complete ===")
+	logger.Info("\n=== Demo Complete ===")
 }
 
 // updateEquipmentWithTransaction demonstrates transaction usage
@@ -324,7 +327,7 @@ func runMigration(ctx context.Context) {
 	pgConfig := createPostgresConfig()
 	pgAdapter, err := dbFactory.CreateAndConnectAdapter(ctx, pgConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+		logger.Fatalw("Failed to connect to PostgreSQL: %v", err)
 	}
 	defer pgAdapter.Disconnect(ctx)
 
@@ -332,11 +335,11 @@ func runMigration(ctx context.Context) {
 	mongoConfig := createMongoDBConfig()
 	mongoAdapter, err := dbFactory.CreateAndConnectAdapter(ctx, mongoConfig)
 	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
+		logger.Fatalw("Failed to connect to MongoDB: %v", err)
 	}
 	defer mongoAdapter.Disconnect(ctx)
 
-	log.Println("✓ Connected to both databases")
+	logger.Info("✓ Connected to both databases")
 
 	// Migrate equipment
 	offset := 0
@@ -352,17 +355,17 @@ func runMigration(ctx context.Context) {
 		for _, equipment := range equipments {
 			err := mongoAdapter.GetIMEIRepository().Create(ctx, equipment)
 			if err != nil {
-				log.Printf("  ⚠ Failed to migrate %s: %v", equipment.IMEI, err)
+				logger.Infof("  ⚠ Failed to migrate %s: %v", equipment.IMEI, err)
 			} else {
 				totalMigrated++
 			}
 		}
 
 		offset += limit
-		log.Printf("  Migrated %d equipment records...", totalMigrated)
+		logger.Infof("  Migrated %d equipment records...", totalMigrated)
 	}
 
-	log.Printf("\n✓ Migration complete: %d records migrated", totalMigrated)
+	logger.Infof("\n✓ Migration complete: %d records migrated", totalMigrated)
 }
 
 // runCleanup demonstrates data cleanup operations
@@ -370,20 +373,20 @@ func runCleanup(ctx context.Context, adapter ports.DatabaseAdapter) {
 
 	// Delete audits older than 90 days
 	cutoffDate := time.Now().Add(-90 * 24 * time.Hour).Format("2006-01-02")
-	log.Printf("Cleaning up data older than %s...", cutoffDate)
+	logger.Infof("Cleaning up data older than %s...", cutoffDate)
 
 	auditCount, err := adapter.PurgeOldAudits(ctx, cutoffDate)
 	if err != nil {
-		log.Printf("  ✗ Failed to purge audits: %v", err)
+		logger.Infof("  ✗ Failed to purge audits: %v", err)
 	} else {
-		log.Printf("  ✓ Purged %d old audit records", auditCount)
+		logger.Infof("  ✓ Purged %d old audit records", auditCount)
 	}
 
 	historyCount, err := adapter.PurgeOldHistory(ctx, cutoffDate)
 	if err != nil {
-		log.Printf("  ✗ Failed to purge history: %v", err)
+		logger.Infof("  ✗ Failed to purge history: %v", err)
 	} else {
-		log.Printf("  ✓ Purged %d old history records", historyCount)
+		logger.Infof("  ✓ Purged %d old history records", historyCount)
 	}
 
 	// Delete old snapshots
@@ -391,20 +394,20 @@ func runCleanup(ctx context.Context, adapter ports.DatabaseAdapter) {
 	snapshotCutoff := time.Now().Add(-30 * 24 * time.Hour)
 	snapshotCount, err := snapshotRepo.DeleteOldSnapshots(ctx, snapshotCutoff)
 	if err != nil {
-		log.Printf("  ✗ Failed to delete snapshots: %v", err)
+		logger.Infof("  ✗ Failed to delete snapshots: %v", err)
 	} else {
-		log.Printf("  ✓ Deleted %d old snapshots", snapshotCount)
+		logger.Infof("  ✓ Deleted %d old snapshots", snapshotCount)
 	}
 
 	// Optimize database
-	log.Println("\nOptimizing database...")
+	logger.Info("\nOptimizing database...")
 	if err := adapter.OptimizeDatabase(ctx); err != nil {
-		log.Printf("  ✗ Failed to optimize: %v", err)
+		logger.Infof("  ✗ Failed to optimize: %v", err)
 	} else {
-		log.Printf("  ✓ Database optimized")
+		logger.Infof("  ✓ Database optimized")
 	}
 
-	log.Println("\n=== Cleanup Complete ===")
+	logger.Info("\n=== Cleanup Complete ===")
 }
 
 // runStatistics demonstrates statistics gathering
@@ -417,21 +420,21 @@ func runStatistics(ctx context.Context, adapter ports.DatabaseAdapter) {
 
 	stats, err := extAuditRepo.GetAuditStatistics(ctx, startTime, endTime)
 	if err != nil {
-		log.Printf("✗ Failed to get statistics: %v", err)
+		logger.Infof("✗ Failed to get statistics: %v", err)
 		return
 	}
 
-	log.Println("Audit Statistics (last 24 hours):")
-	log.Printf("  Total Checks:           %v", stats["total_checks"])
-	log.Printf("  Unique IMEIs:           %v", stats["unique_imeis"])
-	log.Printf("  Whitelisted:            %v", stats["whitelisted_count"])
-	log.Printf("  Blacklisted:            %v", stats["blacklisted_count"])
-	log.Printf("  Greylisted:             %v", stats["greylisted_count"])
-	log.Printf("  Diameter Checks:        %v", stats["diameter_checks"])
-	log.Printf("  HTTP Checks:            %v", stats["http_checks"])
-	log.Printf("  Avg Processing Time:    %.2f ms", stats["avg_processing_time_ms"])
+	logger.Info("Audit Statistics (last 24 hours):")
+	logger.Infof("  Total Checks:           %v", stats["total_checks"])
+	logger.Infof("  Unique IMEIs:           %v", stats["unique_imeis"])
+	logger.Infof("  Whitelisted:            %v", stats["whitelisted_count"])
+	logger.Infof("  Blacklisted:            %v", stats["blacklisted_count"])
+	logger.Infof("  Greylisted:             %v", stats["greylisted_count"])
+	logger.Infof("  Diameter Checks:        %v", stats["diameter_checks"])
+	logger.Infof("  HTTP Checks:            %v", stats["http_checks"])
+	logger.Infof("  Avg Processing Time:    %.2f ms", stats["avg_processing_time_ms"])
 
-	log.Println("\n=== Statistics Complete ===")
+	logger.Info("\n=== Statistics Complete ===")
 }
 
 // strPtr is a helper function to create string pointers

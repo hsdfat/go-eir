@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/observability"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -35,6 +36,7 @@ type Server struct {
 	listener   net.Listener
 	eirService ports.EIRService
 	router     *gin.Engine
+	logger     observability.Logger
 }
 
 // NewServer creates a new HTTP/2 server instance
@@ -58,10 +60,14 @@ func NewServer(config ServerConfig, eirService ports.EIRService) *Server {
 
 	router := SetupRouter(eirService)
 
+	// Initialize logger
+	log := observability.New("http-server", "info")
+
 	return &Server{
 		config:     config,
 		eirService: eirService,
 		router:     router,
+		logger:     log,
 	}
 }
 
@@ -120,12 +126,12 @@ func (s *Server) startTLS() error {
 		return fmt.Errorf("failed to configure HTTP/2: %w", err)
 	}
 
-	fmt.Printf("Starting HTTP/2 server with TLS on %s\n", s.config.ListenAddr)
+	s.logger.Infow("Starting HTTP/2 server with TLS", "address", s.config.ListenAddr)
 
 	// Start server in goroutine
 	go func() {
 		if err := s.httpServer.ServeTLS(s.listener, s.config.TLSCertFile, s.config.TLSKeyFile); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("HTTP/2 TLS server error: %v\n", err)
+			s.logger.Errorw("HTTP/2 TLS server error", "error", err)
 		}
 	}()
 
@@ -142,12 +148,12 @@ func (s *Server) startH2C() error {
 
 	s.httpServer.Handler = h2cHandler
 
-	fmt.Printf("Starting HTTP/2 (H2C) server on %s\n", s.config.ListenAddr)
+	s.logger.Infow("Starting HTTP/2 (H2C) server", "address", s.config.ListenAddr)
 
 	// Start server in goroutine
 	go func() {
 		if err := s.httpServer.Serve(s.listener); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("HTTP/2 H2C server error: %v\n", err)
+			s.logger.Errorw("HTTP/2 H2C server error", "error", err)
 		}
 	}()
 
@@ -156,12 +162,12 @@ func (s *Server) startH2C() error {
 
 // startHTTP1 starts a standard HTTP/1.1 server
 func (s *Server) startHTTP1() error {
-	fmt.Printf("Starting HTTP/1.1 server on %s\n", s.config.ListenAddr)
+	s.logger.Infow("Starting HTTP/1.1 server", "address", s.config.ListenAddr)
 
 	// Start server in goroutine
 	go func() {
 		if err := s.httpServer.Serve(s.listener); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("HTTP/1.1 server error: %v\n", err)
+			s.logger.Errorw("HTTP/1.1 server error", "error", err)
 		}
 	}()
 
@@ -174,7 +180,7 @@ func (s *Server) Stop() error {
 		return nil
 	}
 
-	fmt.Printf("Stopping HTTP server on %s\n", s.config.ListenAddr)
+	s.logger.Infow("Stopping HTTP server", "address", s.config.ListenAddr)
 
 	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
 	defer cancel()
@@ -183,7 +189,7 @@ func (s *Server) Stop() error {
 		return fmt.Errorf("server shutdown failed: %w", err)
 	}
 
-	fmt.Println("HTTP server stopped successfully")
+	s.logger.Info("HTTP server stopped successfully")
 	return nil
 }
 

@@ -1,73 +1,37 @@
 package observability
 
 import (
-	"os"
-
+	"github.com/hsdfat/go-zlog/logger"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-// Logger wraps zap logger for application logging
-type Logger struct {
-	*zap.Logger
+// Log is the global logger instance for the go-eir project
+var Log logger.LoggerI = logger.NewLogger()
+
+func init() {
+	Log.(*logger.Logger).SugaredLogger = Log.(*logger.Logger).SugaredLogger.WithOptions(zap.AddCallerSkip(1))
 }
 
-// NewLogger creates a new logger instance
-func NewLogger(level, format, outputPath string) (*Logger, error) {
-	// Parse log level
-	zapLevel := zapcore.InfoLevel
-	if err := zapLevel.UnmarshalText([]byte(level)); err != nil {
-		return nil, err
-	}
-
-	// Create encoder config
-	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "timestamp",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "message",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-
-	// Create encoder
-	var encoder zapcore.Encoder
-	if format == "json" {
-		encoder = zapcore.NewJSONEncoder(encoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
-	}
-
-	// Create writer
-	var writer zapcore.WriteSyncer
-	if outputPath == "stdout" {
-		writer = zapcore.AddSync(os.Stdout)
-	} else if outputPath == "stderr" {
-		writer = zapcore.AddSync(os.Stderr)
-	} else {
-		file, err := os.OpenFile(outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			return nil, err
-		}
-		writer = zapcore.AddSync(file)
-	}
-
-	// Create core
-	core := zapcore.NewCore(encoder, writer, zapLevel)
-
-	// Create logger
-	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
-
-	return &Logger{logger}, nil
+// SetLevel sets the global log level
+// Valid levels: "debug", "info", "warn", "error", "fatal"
+func SetLevel(level string) {
+	logger.SetLevel(level)
 }
 
-// WithFields adds structured fields to the logger
-func (l *Logger) WithFields(fields ...zap.Field) *Logger {
-	return &Logger{l.Logger.With(fields...)}
+// WithFields creates a new logger with contextual fields
+// Example: logger.WithFields("conn_id", "abc123", "state", "OPEN")
+func WithFields(args ...any) logger.LoggerI {
+	return Log.With(args...).(logger.LoggerI)
+}
+
+// Logger is an alias for the underlying logger interface
+type Logger = logger.LoggerI
+
+// New creates a new logger with a name and level
+func New(name, level string) Logger {
+	if level != "" {
+		// Set level if provided
+		logger.SetLevel(level)
+	}
+	return Log.With("component", name).(logger.LoggerI)
 }
