@@ -42,17 +42,18 @@ type IMEIRepository interface {
 	IncrementCheckCount(ctx context.Context, imei string) error
 
 	// IMEI logic operations (for pkg/logic integration)
-	LookupImeiInfo(startRange string) (*ImeiInfo, bool)
-	SaveImeiInfo(info *ImeiInfo) error
-	ListAllImeiInfo() []ImeiInfo
+	LookupImeiInfo(ctx context.Context, startRange string) (*ImeiInfo, bool)
+	SaveImeiInfo(ctx context.Context, info *ImeiInfo) error
+	ListAllImeiInfo(ctx context.Context) []ImeiInfo
 	ClearImeiInfo()
 
 	// TAC logic operations (for pkg/logic integration)
-	SaveTacInfo(info *TacInfo) error
-	LookupTacInfo(key string) (*TacInfo, bool)
-	PrevTacInfo(key string) (*TacInfo, bool)
-	NextTacInfo(key string) (*TacInfo, bool)
-	ListAllTacInfo() []*TacInfo
+	SaveTacInfo(ctx context.Context, info *TacInfo) error
+	LookupTacInfo(ctx context.Context, key string) (*TacInfo, bool)
+	PrevTacInfo(ctx context.Context, key string) (*TacInfo, bool)
+	NextTacInfo(ctx context.Context, key string) (*TacInfo, bool)
+	ListAllTacInfo(ctx context.Context) []*TacInfo
+	ClearTacInfo(ctx context.Context)
 }
 
 // AuditRepository defines the interface for audit logging

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -170,14 +171,35 @@ func fillRight(s string, pad rune) string {
 func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertTacResult {
 	logger.Log.Infow("InsertTac logic started", "start_range", tacInfo.StartRangeTac, "end_range", tacInfo.EndRangeTac, "color", tacInfo.Color)
 
-	config.LoadEnv()
+	// config.LoadEnv()
 	tacMaxLength = utils.GetTacMaxLength()
+	logger.Log.Debugw("tacMaxLength: ", tacMaxLength)
 	if len(tacInfo.StartRangeTac) == 0 || len(tacInfo.StartRangeTac) > tacMaxLength {
 		logger.Log.Warnw("InsertTac invalid start range length", "start_range", tacInfo.StartRangeTac, "length", len(tacInfo.StartRangeTac), "max_length", tacMaxLength)
 		return models.InsertTacResult{
 			Status:  "error",
 			Error:   "invalid_length",
 			TacInfo: tacInfo,
+		}
+	}
+
+	for _, character := range tacInfo.StartRangeTac {
+		if character < '0' || character > '9' {
+			return models.InsertTacResult{
+				Status:  "error",
+				Error:   "invalid_value",
+				TacInfo: tacInfo,
+			}
+		}
+	}
+
+	for _, character := range tacInfo.EndRangeTac {
+		if character < '0' || character > '9' {
+			return models.InsertTacResult{
+				Status:  "error",
+				Error:   "invalid_value",
+				TacInfo: tacInfo,
+			}
 		}
 	}
 
@@ -213,8 +235,8 @@ func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertT
 	}
 	startRangeSearch := newStart + "-" + newEnd
 	logger.Log.Debugw("InsertTac normalized ranges", "new_start", newStart, "new_end", newEnd, "key", startRangeSearch)
-
-	if lookup, ok := repo.LookupTacInfo(startRangeSearch); ok {
+	ctx := context.Background()
+	if lookup, ok := repo.LookupTacInfo(ctx, startRangeSearch); ok {
 		logger.Log.Warnw("InsertTac range already exists", "key", startRangeSearch, "lookup", lookup)
 		return models.InsertTacResult{
 			Status:  "error",
@@ -223,77 +245,86 @@ func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertT
 		}
 	}
 
-	var finalPrevLink *string = nil
-	prev, ok := repo.PrevTacInfo(startRangeSearch)
-	if ok {
-		logger.Log.Debugw("InsertTac previous TAC info found", "prev_key", prev.KeyTac, "prev_start", prev.StartRangeTac, "prev_end", prev.EndRangeTac)
-	} else {
-		logger.Log.Debugw("InsertTac no previous TAC info found")
-	}
+	var bestParent *ports.TacInfo
+	var listUpdate []*ports.TacInfo
+
+	p, ok := repo.PrevTacInfo(ctx, startRangeSearch)
 	for ok {
-		isParent := prev.StartRangeTac <= newStart && prev.EndRangeTac >= newEnd
-		isChild := newStart <= prev.StartRangeTac && newEnd >= prev.EndRangeTac
+		isParent := p.StartRangeTac <= newStart && p.EndRangeTac >= newEnd
+		isChild := p.StartRangeTac >= newStart && p.EndRangeTac <= newEnd
 
-		if isParent || isChild {
-			key := prev.KeyTac
-			finalPrevLink = &key
-			logger.Log.Debugw("InsertTac found parent/child relationship", "prev_key", key, "is_parent", isParent, "is_child", isChild)
-			break
+		if isParent {
+			if bestParent == nil || (p.StartRangeTac >= bestParent.StartRangeTac && p.EndRangeTac <= bestParent.EndRangeTac) {
+				bestParent = p
+			}
+		} else if isChild {
+			u := *p
+			u.PrevLink = &startRangeSearch
+			listUpdate = append(listUpdate, &u)
+		} else if p.EndRangeTac >= newStart {
+			return models.InsertTacResult{Status: "error", Error: "range_exist", TacInfo: tacInfo}
 		}
-		logger.Log.Debugw("Data before compare", "prev.EndRangeTac", prev.EndRangeTac, "newStart", newStart)
-		if prev.EndRangeTac < newStart {
-			key := prev.KeyTac
-			finalPrevLink = &key
-			logger.Log.Debugw("InsertTac setting prev link", "prev_key", key)
 
-			if prev.PrevLink != nil && *prev.PrevLink != "" {
-				prev, ok = repo.LookupTacInfo(*prev.PrevLink)
-				continue
+		if p.EndRangeTac < newStart {
+			if p.PrevLink == nil || *p.PrevLink == "" {
+				break
+			}
+			parent, found := repo.LookupTacInfo(ctx, *p.PrevLink)
+			if found && parent.StartRangeTac <= newStart && parent.EndRangeTac >= newEnd {
+				if bestParent == nil || (parent.StartRangeTac >= bestParent.StartRangeTac && parent.EndRangeTac <= bestParent.EndRangeTac) {
+					bestParent = parent
+				}
 			}
 			break
 		}
-
-		logger.Log.Warnw("InsertTac range conflict detected", "prev_key", prev.KeyTac, "new_start", newStart, "new_end", newEnd)
-		return models.InsertTacResult{Status: "error", Error: "range_exist", TacInfo: tacInfo}
+		p, ok = repo.PrevTacInfo(ctx, p.KeyTac)
 	}
 
-	var listUpdate []*ports.TacInfo
-	next, ok := repo.NextTacInfo(startRangeSearch)
-	logger.Log.Debugw("Next TAC info", "next", next)
+	n, ok := repo.NextTacInfo(ctx, startRangeSearch)
 	for ok {
-		if next.StartRangeTac >= newStart && next.EndRangeTac <= newEnd {
-			newKeyPtr := startRangeSearch
-			updatedNext := *next
-			updatedNext.PrevLink = &newKeyPtr
-			listUpdate = append(listUpdate, &updatedNext)
-			logger.Log.Infow("InsertTac marking child for update", "child_key", next.KeyTac, "child_range", next.StartRangeTac+"-"+next.EndRangeTac, "parent_key", newKeyPtr)
+		isParent := n.StartRangeTac <= newStart && n.EndRangeTac >= newEnd
+		isChild := n.StartRangeTac >= newStart && n.EndRangeTac <= newEnd
 
-			next, ok = repo.NextTacInfo(next.KeyTac)
-		} else {
-			logger.Log.Debugw("InsertTac entry is not a child, stopping iteration", "next_key", next.KeyTac)
+		if isParent {
+			if bestParent == nil || (n.StartRangeTac >= bestParent.StartRangeTac && n.EndRangeTac <= bestParent.EndRangeTac) {
+				bestParent = n
+			}
+		} else if isChild {
+			u := *n
+			u.PrevLink = &startRangeSearch
+			listUpdate = append(listUpdate, &u)
+		} else if n.StartRangeTac <= newEnd {
+			return models.InsertTacResult{Status: "error", Error: "range_exist", TacInfo: tacInfo}
+		}
+
+		if n.StartRangeTac > newEnd {
 			break
 		}
+		n, ok = repo.NextTacInfo(ctx, n.KeyTac)
 	}
 
-	logger.Log.Debugw("InsertTac saving updates", "update_count", len(listUpdate))
-	for _, u := range listUpdate {
-		_ = repo.SaveTacInfo(u)
+	var finalPrevLink *string
+	if bestParent != nil {
+		k := bestParent.KeyTac
+		finalPrevLink = &k
 	}
 
-	tacInfoInsert := &ports.TacInfo{
-		KeyTac:        startRangeSearch,
-		StartRangeTac: newStart,
-		EndRangeTac:   newEnd,
-		Color:         tacInfo.Color,
-		PrevLink:      finalPrevLink,
+	tacInsert := &ports.TacInfo{
+		KeyTac: startRangeSearch, StartRangeTac: newStart, EndRangeTac: newEnd,
+		Color: tacInfo.Color, PrevLink: finalPrevLink,
 	}
 
-	logger.Log.Debugw("InsertTac saving new TAC info", "key", startRangeSearch, "prev_link", finalPrevLink)
-	_ = repo.SaveTacInfo(tacInfoInsert)
-
-	logger.Log.Infow("InsertTac logic completed successfully", "key", startRangeSearch, "color", tacInfo.Color)
-	return models.InsertTacResult{
-		Status:  "ok",
-		TacInfo: tacInfo,
+	if err := repo.SaveTacInfo(ctx, tacInsert); err != nil {
+		return models.InsertTacResult{Status: "error", Error: err.Error(), TacInfo: tacInfo}
 	}
+
+	for _, child := range listUpdate {
+		_ = repo.SaveTacInfo(ctx, child)
+	}
+
+	return models.InsertTacResult{Status: "ok", TacInfo: tacInfo}
+}
+
+func ClearTacInfo(repo ports.IMEIRepository) {
+	repo.ClearImeiInfo()
 }

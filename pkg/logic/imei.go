@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -147,8 +148,8 @@ func InsertImei(repo ports.IMEIRepository, imei string, color string, status mod
 
 	start, end := normalizeImeiForInsert(imei)
 	logger.Log.Debugw("InsertImei normalized", "imei", imei, "start", start, "end", end)
-
-	if info, ok := repo.LookupImeiInfo(start); ok {
+	ctx := context.Background()
+	if info, ok := repo.LookupImeiInfo(ctx, start); ok {
 		logger.Log.Debugw("InsertImei found existing start IMEI", "imei", imei, "start", start, "existing_color", info.Color)
 
 		if info.Color != color {
@@ -178,7 +179,7 @@ func InsertImei(repo ports.IMEIRepository, imei string, color string, status mod
 		}
 
 		logger.Log.Debugw("InsertImei updating existing entry", "imei", imei, "start", start, "end", end)
-		_ = repo.SaveImeiInfo(info)
+		_ = repo.SaveImeiInfo(ctx, info)
 		logger.Log.Infow("InsertImei logic completed successfully (updated)", "imei", imei, "start", start)
 		return models.InsertImeiResult{
 			Status: "ok",
@@ -187,7 +188,7 @@ func InsertImei(repo ports.IMEIRepository, imei string, color string, status mod
 	}
 
 	logger.Log.Debugw("InsertImei creating new entry", "imei", imei, "start", start, "end", end, "color", color)
-	_ = repo.SaveImeiInfo(&ports.ImeiInfo{
+	_ = repo.SaveImeiInfo(ctx, &ports.ImeiInfo{
 		StartIMEI: start,
 		EndIMEI:   []string{end},
 		Color:     color,

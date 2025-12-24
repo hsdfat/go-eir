@@ -395,13 +395,24 @@ func (h *Handler) PostInsertTac(c *gin.Context) {
 	}
 
 	// Convert color to equipment status
-	equipmentStatus := convertColorToEquipmentStatus(response.TacInfo.Color)
+	var equipmentStatus models.EquipmentStatus
+	if response.TacInfo != nil {
+		equipmentStatus = convertColorToEquipmentStatus(response.TacInfo.Color)
+	} else {
+		equipmentStatus = convertColorToEquipmentStatus(tacInfo.Color)
+	}
 
 	logger.Log.Infow("HTTP PostInsertTac response", "start_range", tacInfo.StartRangeTac, "status", response.Status, "equipment_status", equipmentStatus)
 	// Return response
-	c.JSON(http.StatusOK, EirResponseData{
-		Status: equipmentStatus,
-	})
+	if response.Status == "error" {
+		c.JSON(http.StatusBadRequest, EirResponseData{
+			Status: equipmentStatus,
+		})
+	} else {
+		c.JSON(http.StatusCreated, EirResponseData{
+			Status: equipmentStatus,
+		})
+	}
 }
 
 // HealthCheck handles GET /health

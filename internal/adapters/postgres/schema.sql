@@ -88,6 +88,22 @@ CREATE INDEX idx_audit_log_status ON audit_log USING btree (status);
 CREATE INDEX idx_audit_log_request_source ON audit_log USING btree (request_source);
 CREATE INDEX idx_audit_log_supi ON audit_log USING btree (supi) WHERE supi IS NOT NULL;
 
+CREATE TABLE IMEI_INFO (
+    StartIMEI VARCHAR(16) PRIMARY KEY,
+    EndIMEI TEXT[] DEFAULT '{}',
+    Color CHAR(1) NOT NULL CHECK (Color IN ('w', 'b', 'g'))
+);
+
+CREATE TABLE TAC_INFO (
+    KeyTAC VARCHAR(64) PRIMARY KEY,
+    StartRangeTAC VARCHAR(20) NOT NULL,
+    EndRangeTAC VARCHAR(20) NOT NULL,
+    Color VARCHAR(10) NOT NULL CHECK (Color IN ('black', 'white', 'grey')),
+    PrevLink VARCHAR(64) REFERENCES TAC_INFO(KeyTAC) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_tac_range_lookup ON TAC_INFO (StartRangeTAC, EndRangeTAC);
+
 -- Function to automatically update last_updated timestamp
 CREATE OR REPLACE FUNCTION update_last_updated_column()
 RETURNS TRIGGER AS $$

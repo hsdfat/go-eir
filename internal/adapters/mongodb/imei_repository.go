@@ -189,15 +189,15 @@ func (r *imeiRepository) IncrementCheckCount(ctx context.Context, imei string) e
 }
 
 // IMEI logic operations (not implemented for MongoDB - use in-memory for testing)
-func (r *imeiRepository) LookupImeiInfo(startRange string) (*ports.ImeiInfo, bool) {
+func (r *imeiRepository) LookupImeiInfo(ctx context.Context, startRange string) (*ports.ImeiInfo, bool) {
 	return nil, false
 }
 
-func (r *imeiRepository) SaveImeiInfo(info *ports.ImeiInfo) error {
+func (r *imeiRepository) SaveImeiInfo(ctx context.Context, info *ports.ImeiInfo) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (r *imeiRepository) ListAllImeiInfo() []ports.ImeiInfo {
+func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
 	return []ports.ImeiInfo{}
 }
 
@@ -206,22 +206,22 @@ func (r *imeiRepository) ClearImeiInfo() {
 }
 
 // TAC logic operations (not implemented for MongoDB - use in-memory for testing)
-func (r *imeiRepository) SaveTacInfo(info *ports.TacInfo) error {
+func (r *imeiRepository) SaveTacInfo(ctx context.Context, info *ports.TacInfo) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (r *imeiRepository) LookupTacInfo(key string) (*ports.TacInfo, bool) {
+func (r *imeiRepository) LookupTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
 	return nil, false
 }
 
-func (r *imeiRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) {
+func (r *imeiRepository) PrevTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
 	return nil, false
 }
 
-func (r *imeiRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
+func (r *imeiRepository) NextTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
 	return nil, false
 }
 
-func (r *imeiRepository) ListAllTacInfo() []*ports.TacInfo {
+func (r *imeiRepository) ListAllTacInfo(ctx context.Context) []*ports.TacInfo {
 	return []*ports.TacInfo{}
 }

@@ -9,16 +9,19 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/adapters/memory"
+	"github.com/hsdfat8/eir/internal/adapters/postgres"
 	"github.com/hsdfat8/eir/internal/adapters/testutil"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
 	"github.com/hsdfat8/eir/internal/logger"
 	legacyModels "github.com/hsdfat8/eir/models"
 	"github.com/hsdfat8/eir/pkg/logic"
+	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 	"golang.org/x/net/http2"
 )
 
@@ -30,10 +33,16 @@ type mockEIRService struct {
 }
 
 // newMockEIRService creates a properly initialized mock service
-func newMockEIRService() *mockEIRService {
-	return &mockEIRService{
-		imeiRepo: memory.NewInMemoryIMEIRepository(),
+func newMockEIRService() (*mockEIRService, func()) {
+	_ = godotenv.Load("../../../.env")
+	dbURL := os.Getenv("DATABASE_URL")
+	db, _ := sqlx.Connect("postgres", dbURL)
+	cleanup := func() {
+		db.Close()
 	}
+	return &mockEIRService{
+		imeiRepo: postgres.NewIMEIRepository(db),
+	}, cleanup
 }
 
 func (m *mockEIRService) CheckImei(ctx context.Context, imei string, status models.SystemStatus) (*ports.CheckImeiResult, error) {
@@ -133,21 +142,6 @@ func (m *mockEIRService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) 
 	// Use pkg/logic for TAC insertion with the imeiRepo
 	result := logic.InsertTac(m.imeiRepo, legacyTacInfo)
 
-	// Track inserted TACs
-	if m.insertedTacs == nil {
-		m.insertedTacs = []ports.TacInfo{}
-	}
-	if result.TacInfo.KeyTac != "" {
-		logger.Log.Debugw("insert new tac to memory", "tac", result.TacInfo)
-		m.insertedTacs = append(m.insertedTacs, ports.TacInfo{
-			KeyTac:        result.TacInfo.KeyTac,
-			StartRangeTac: result.TacInfo.StartRangeTac,
-			EndRangeTac:   result.TacInfo.EndRangeTac,
-			Color:         result.TacInfo.Color,
-			PrevLink:      result.TacInfo.PrevLink,
-		})
-	}
-
 	var resultTacInfo *ports.TacInfo
 	if result.TacInfo.KeyTac != "" {
 		resultTacInfo = &ports.TacInfo{
@@ -172,7 +166,13 @@ func (m *mockEIRService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) 
 }
 
 func (m *mockEIRService) ListAllTacInfo() []*ports.TacInfo {
-	return m.imeiRepo.ListAllTacInfo()
+	ctx := context.Background()
+	return m.imeiRepo.ListAllTacInfo(ctx)
+}
+
+func (m *mockEIRService) ClearTacInfo() {
+	ctx := context.Background()
+	m.imeiRepo.ClearTacInfo(ctx)
 }
 
 func (m *mockEIRService) RemoveEquipment(ctx context.Context, imei string) error {
@@ -200,7 +200,7 @@ func TestServerHTTP1Basic(t *testing.T) {
 		ListenAddr: "127.0.0.1:8080", // Standard HTTP port
 	}
 
-	mockService := newMockEIRService()
+	mockService, _ := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -234,7 +234,7 @@ func TestServerHTTP1WithPCAP(t *testing.T) {
 		EnableH2C:  false,            // Use HTTP/1.1 for easier Wireshark decoding
 	}
 
-	mockService := newMockEIRService()
+	mockService, _ := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -351,7 +351,7 @@ func TestServerH2C(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService := newMockEIRService()
+	mockService, _ := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -470,7 +470,7 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService := newMockEIRService()
+	mockService, _ := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -554,7 +554,7 @@ func TestServerGracefulShutdown(t *testing.T) {
 		ShutdownTimeout: 5 * time.Second,
 	}
 
-	mockService := newMockEIRService()
+	mockService, _ := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -588,7 +588,7 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService := newMockEIRService()
+	mockService, _ := newMockEIRService()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -774,6 +774,212 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 	t.Logf("PCAP file saved: %s (contains all CheckImei test traffic)", pcapFile)
 }
 
+// TestCheckTacWithPCAP tests CheckTac functionality with HTTP/2 and PCAP capture
+// Flow: 1) Insert TAC ranges into database, 2) Check various IMEIs against TAC ranges
+func TestCheckTacWithPCAP(t *testing.T) {
+	// Create PCAP writer for capturing test traffic
+	pcapFile := "http2_check_tac_8080_test.pcap"
+	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
+	if err != nil {
+		t.Fatalf("Failed to create PCAP writer: %v", err)
+	}
+	defer pcapWriter.Close()
+
+	// Configure server for HTTP/2 (H2C)
+	config := ServerConfig{
+		ListenAddr: "127.0.0.1:8080",
+		EnableH2C:  true,
+	}
+
+	mockService, cleanup := newMockEIRService()
+	defer cleanup()
+	server := NewServer(config, mockService)
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	addr := "127.0.0.1:8080"
+	t.Logf("HTTP/2 server started on %s for CheckTac testing", addr)
+
+	// Create HTTP/2 client with PCAP capture
+	client := &http.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				conn, err := net.Dial(network, addr)
+				if err != nil {
+					return nil, err
+				}
+				return testutil.NewCaptureConnection(conn, pcapWriter), nil
+			},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// Clear database before test
+	mockService.ClearTacInfo()
+
+	// Step 1: Insert TAC ranges
+	t.Run("Step1_InsertTacRanges", func(t *testing.T) {
+		testCases := []struct {
+			startRangeTac string
+			endRangeTac   string
+			color         string
+			description   string
+		}{
+			{"35", "35", "black", "Single TAC - Blacklisted"},
+			{"353", "353", "grey", "Single TAC - Greylisted"},
+			{"3531", "3531", "white", "Single TAC - Whitelisted"},
+			{"35310", "35319", "white", "TAC range (10 values) - Whitelisted"},
+			{"353200", "353299", "grey", "TAC range (100 values) - Greylisted"},
+			{"3533000", "3533999", "black", "TAC range (1000 values) - Blacklisted"},
+			{"35340000", "35349999", "white", "Large TAC range (10000 values) - Whitelisted"},
+			{"90", "99", "black", "TAC range for testing"},
+			{"912", "912", "grey", "Exact match greylisted"},
+			{"9123456789012", "9123456789012", "black", "Long TAC blacklisted"},
+			{"91234567895264", "91234567895264", "white", "Exact IMEI whitelisted"},
+		}
+
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+			}
+
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.description, err)
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+				t.Errorf("TAC insertion '%s' failed: Status=%d, Response=%s",
+					tc.description, resp.StatusCode, string(bodyBytes))
+			} else {
+				t.Logf("✓ TAC inserted '%s': Range=%s-%s, Color=%s",
+					tc.description, tc.startRangeTac, tc.endRangeTac, tc.color)
+			}
+		}
+
+		// List all inserted TAC data
+		t.Logf("\n========== Inserted TAC Ranges ==========")
+		allTacs := mockService.ListAllTacInfo()
+		for i, tac := range allTacs {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+			t.Logf("  [%d] Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("Total TAC ranges: %d", len(allTacs))
+		t.Logf("==========================================\n")
+	})
+
+	// Step 2: Check IMEIs against TAC ranges
+	t.Run("Step2_CheckTacQueries", func(t *testing.T) {
+		testCases := []struct {
+			imei           string
+			expectedColor  string
+			expectedStatus models.EquipmentStatus
+			description    string
+		}{
+			// Test exact matches
+			{"35", "black", models.EquipmentStatusBlacklisted, "Exact match - Blacklisted"},
+			{"353", "grey", models.EquipmentStatusGreylisted, "Exact match - Greylisted"},
+			{"3531", "white", models.EquipmentStatusWhitelisted, "Exact match - Whitelisted"},
+
+			// Test range matches
+			{"35310", "white", models.EquipmentStatusWhitelisted, "Start of range"},
+			{"35315", "white", models.EquipmentStatusWhitelisted, "Middle of range"},
+			{"35319", "white", models.EquipmentStatusWhitelisted, "End of range"},
+			{"353200", "grey", models.EquipmentStatusGreylisted, "Start of 100-value range"},
+			{"353250", "grey", models.EquipmentStatusGreylisted, "Middle of 100-value range"},
+			{"353299", "grey", models.EquipmentStatusGreylisted, "End of 100-value range"},
+
+			// Test large range
+			{"3533000", "black", models.EquipmentStatusBlacklisted, "Start of large range"},
+			{"3533500", "black", models.EquipmentStatusBlacklisted, "Middle of large range"},
+			{"3533999", "black", models.EquipmentStatusBlacklisted, "End of large range"},
+
+			// Test very large range
+			{"35340000", "white", models.EquipmentStatusWhitelisted, "Start of very large range"},
+			{"35345000", "white", models.EquipmentStatusWhitelisted, "Middle of very large range"},
+			{"35349999", "white", models.EquipmentStatusWhitelisted, "End of very large range"},
+
+			// Test specific IMEIs from CheckImei tests
+			{"9", "black", models.EquipmentStatusBlacklisted, "Single digit in black range"},
+			{"912", "grey", models.EquipmentStatusGreylisted, "Exact greylisted TAC"},
+			{"9123456789012", "black", models.EquipmentStatusBlacklisted, "Long blacklisted TAC"},
+			{"91234567895264", "white", models.EquipmentStatusWhitelisted, "Exact whitelisted IMEI"},
+
+			// Test out of range (should return unknown color with error status)
+			{"1", "unknown", models.EquipmentStatusWhitelisted, "Not in any range"},
+			{"88", "unknown", models.EquipmentStatusWhitelisted, "Below 90-99 range"},
+			{"100", "unknown", models.EquipmentStatusWhitelisted, "Above 90-99 range"},
+		}
+
+		for _, tc := range testCases {
+			url := fmt.Sprintf("http://%s/api/v1/check-tac/%s", addr, tc.imei)
+
+			resp, err := client.Get(url)
+			if err != nil {
+				t.Errorf("CheckTac request failed for IMEI %s: %v", tc.imei, err)
+				continue
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Logf("  CheckTac '%s': IMEI=%s, Status=%d, Response=%s",
+					tc.description, tc.imei, resp.StatusCode, string(bodyBytes))
+				continue
+			}
+
+			var result struct {
+				Status  string         `json:"status"`
+				IMEI    string         `json:"imei"`
+				Color   string         `json:"color"`
+				TacInfo *ports.TacInfo `json:"tac_info,omitempty"`
+			}
+
+			if err := json.Unmarshal(bodyBytes, &result); err != nil {
+				t.Errorf("Failed to decode response for IMEI %s: %v", tc.imei, err)
+				continue
+			}
+
+			// Verify color match
+			if result.Color != tc.expectedColor {
+				t.Errorf("CheckTac '%s': Expected color %s, got %s (IMEI=%s)",
+					tc.description, tc.expectedColor, result.Color, tc.imei)
+			} else {
+				tacInfoStr := "nil"
+				if result.TacInfo != nil {
+					tacInfoStr = fmt.Sprintf("%s-%s", result.TacInfo.StartRangeTac, result.TacInfo.EndRangeTac)
+				}
+				t.Logf("  ✓ CheckTac '%s': IMEI=%s, Color=%s, TacRange=%s",
+					tc.description, tc.imei, result.Color, tacInfoStr)
+			}
+		}
+	})
+
+	t.Logf("\n========== Test Summary ==========")
+	t.Logf("PCAP file saved: %s", pcapFile)
+	t.Log("Open in Wireshark with filter: http2 or tcp.port == 8080")
+	t.Logf("==================================")
+}
+
 // TestInsertTacWithPCAP tests InsertTac functionality with HTTP/2 and PCAP capture
 // This test verifies the TAC insertion logic through the HTTP API
 func TestInsertTacWithPCAP(t *testing.T) {
@@ -791,7 +997,8 @@ func TestInsertTacWithPCAP(t *testing.T) {
 		EnableH2C:  true, // Enable HTTP/2 Cleartext
 	}
 
-	mockService := newMockEIRService()
+	mockService, cleanup := newMockEIRService()
+	defer cleanup()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -820,152 +1027,174 @@ func TestInsertTacWithPCAP(t *testing.T) {
 		Timeout: 5 * time.Second,
 	}
 
-	// // Eir_Add_63
-	// t.Run("Eir_Add_63", func(t *testing.T) {
-	// 	testCases := []struct {
-	// 		keyTac        string
-	// 		startRangeTac string
-	// 		endRangeTac   string
-	// 		color         string
-	// 	}{
-	// 		{"1134567890123456-1134567890123456", "1134567890123456", "1134567890123456", "white"},
-	// 		{"2-2", "2", "2", "2"},
-	// 	}
+	// clean database before test
+	mockService.ClearTacInfo()
 
-	// 	for _, tc := range testCases {
-	// 		tacInfo := ports.TacInfo{
-	// 			KeyTac:        tc.keyTac,
-	// 			StartRangeTac: tc.startRangeTac,
-	// 			EndRangeTac:   tc.endRangeTac,
-	// 			Color:         tc.color,
-	// 			PrevLink:      nil,
-	// 		}
+	// Eir_Add_63
+	t.Run("Eir_Add_63", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"1134567890123456-1134567890123456", "1134567890123456", "1134567890123456", "white"},
+			{"2-2", "2", "2", "white"},
+		}
 
-	// 		body, _ := json.Marshal(tacInfo)
-	// 		url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
 
-	// 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	// 		if err != nil {
-	// 			t.Errorf("InsertTac request failed for %s: %v", tc.keyTac, err)
-	// 			continue
-	// 		}
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
 
-	// 		bodyBytes, _ := io.ReadAll(resp.Body)
-	// 		resp.Body.Close()
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode == http.StatusBadRequest {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
 
-	// 		t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
-	// 			tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
-	// 	}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 
-	// 	// List all data that was inserted during the test
-	// 	t.Logf("\n========== All Inserted TAC Data ==========")
-	// 	t.Logf("Total TAC records inserted: %d", len(mockService.insertedTacs))
-	// 	for i, tac := range mockService.insertedTacs {
-	// 		t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s",
-	// 			i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color)
-	// 	}
-	// 	t.Logf("==========================================\n")
-	// })
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
 
-	// // Eir_Add_64
-	// t.Run("Eir_Add_64", func(t *testing.T) {
-	// 	testCases := []struct {
-	// 		keyTac        string
-	// 		startRangeTac string
-	// 		endRangeTac   string
-	// 		color         string
-	// 	}{
-	// 		{"111-1222", "111", "1222", "white"},
-	// 		{"1223-13", "1223", "13", "white"},
-	// 		{"123456789012345-123456789012349", "123456789012345", "123456789012349", "white"},
-	// 		{"1-9", "1", "9", "white"},
-	// 		{"4-4234567890123456", "4", "4234567890123456", "white"},
-	// 		{"1234567890123456-1234567890123457", "1234567890123456", "1234567890123457", "white"},
-	// 	}
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// Eir_Add_64
+	t.Run("Eir_Add_64", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"111-1222", "111", "1222", "white"},
+			{"1223-13", "1223", "13", "white"},
+			{"123456789012345-123456789012349", "123456789012345", "123456789012349", "white"},
+			{"1-9", "1", "9", "white"},
+			{"4-4234567890123456", "4", "4234567890123456", "white"},
+			{"1234567890123456-1234567890123457", "1234567890123456", "1234567890123457", "white"},
+		}
 
-	// 	for _, tc := range testCases {
-	// 		tacInfo := ports.TacInfo{
-	// 			KeyTac:        tc.keyTac,
-	// 			StartRangeTac: tc.startRangeTac,
-	// 			EndRangeTac:   tc.endRangeTac,
-	// 			Color:         tc.color,
-	// 			PrevLink:      nil,
-	// 		}
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
 
-	// 		body, _ := json.Marshal(tacInfo)
-	// 		url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
 
-	// 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	// 		if err != nil {
-	// 			t.Errorf("InsertTac request failed for %s: %v", tc.keyTac, err)
-	// 			continue
-	// 		}
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode == http.StatusBadRequest {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 
-	// 		bodyBytes, _ := io.ReadAll(resp.Body)
-	// 		resp.Body.Close()
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
 
-	// 		t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
-	// 			tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
-	// 	}
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// Eir_Add_65
+	t.Run("Eir_Add_65", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"133-133", "133", "133", "white"},
+			{"132-132", "132", "132", "white"},
+			{"134-134", "134", "134", "white"},
+		}
 
-	// 	// List all data that was inserted during the test
-	// 	t.Logf("\n========== All Inserted TAC Data ==========")
-	// 	t.Logf("Total TAC records inserted: %d", len(mockService.insertedTacs))
-	// 	for i, tac := range mockService.insertedTacs {
-	// 		t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
-	// 			i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, *tac.PrevLink)
-	// 	}
-	// 	t.Logf("==========================================\n")
-	// })
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
 
-	// // Eir_Add_65
-	// t.Run("Eir_Add_65", func(t *testing.T) {
-	// 	testCases := []struct {
-	// 		keyTac        string
-	// 		startRangeTac string
-	// 		endRangeTac   string
-	// 		color         string
-	// 	}{
-	// 		{"133-133", "133", "133", "white"},
-	// 		{"132-132", "132", "132", "white"},
-	// 		{"134-134", "134", "134", "white"},
-	// 	}
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
 
-	// 	for _, tc := range testCases {
-	// 		tacInfo := ports.TacInfo{
-	// 			KeyTac:        tc.keyTac,
-	// 			StartRangeTac: tc.startRangeTac,
-	// 			EndRangeTac:   tc.endRangeTac,
-	// 			Color:         tc.color,
-	// 			PrevLink:      nil,
-	// 		}
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode == http.StatusBadRequest {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 
-	// 		body, _ := json.Marshal(tacInfo)
-	// 		url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
 
-	// 		resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	// 		if err != nil {
-	// 			t.Errorf("InsertTac request failed for %s: %v", tc.keyTac, err)
-	// 			continue
-	// 		}
-
-	// 		bodyBytes, _ := io.ReadAll(resp.Body)
-	// 		resp.Body.Close()
-
-	// 		t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
-	// 			tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
-	// 	}
-
-	// 	// List all data that was inserted during the test
-	// 	t.Logf("\n========== All Inserted TAC Data ==========")
-	// 	t.Logf("Total TAC records inserted: %d", len(mockService.insertedTacs))
-	// 	for i, tac := range mockService.insertedTacs {
-	// 		t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
-	// 			i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, *tac.PrevLink)
-	// 	}
-	// 	t.Logf("==========================================\n")
-	// })
-
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		t.Logf("Total TAC records inserted: %d", len(mockService.insertedTacs))
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
 	// Eir_Add_66
 	t.Run("Eir_Add_66", func(t *testing.T) {
 		testCases := []struct {
@@ -992,10 +1221,13 @@ func TestInsertTacWithPCAP(t *testing.T) {
 
 			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 			if err != nil {
-				t.Errorf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
 				continue
 			}
-
+			if resp.StatusCode == http.StatusBadRequest {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 
@@ -1016,26 +1248,345 @@ func TestInsertTacWithPCAP(t *testing.T) {
 		}
 		t.Logf("==========================================\n")
 	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// Eir_Add_67
+	t.Run("Eir_Add_67", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"1222-1999", "1222", "1999", "white"},
+			{"1222-1333", "1222", "1333", "white"},
+			{"1666-1999", "1666", "1999", "white"},
+			{"1888-1888", "1888", "1888", "white"},
+			{"1222345-1222345", "1222345", "1222345", "white"},
+		}
 
-	// Test Case 6: Invalid JSON payload
-	// t.Run("InvalidJSONPayload", func(t *testing.T) {
-	// 	invalidJSON := []byte(`{"KeyTac": "invalid json structure"`)
-	// 	url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
 
-	// 	resp, err := client.Post(url, "application/json", bytes.NewReader(invalidJSON))
-	// 	if err != nil {
-	// 		t.Fatalf("Request failed: %v", err)
-	// 	}
-	// 	defer resp.Body.Close()
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
 
-	// 	if resp.StatusCode != http.StatusBadRequest {
-	// 		t.Errorf("Expected status 400 for invalid JSON, got %d", resp.StatusCode)
-	// 	}
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode == http.StatusBadRequest {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 
-	// 	bodyBytes, _ := io.ReadAll(resp.Body)
-	// 	t.Logf("Invalid JSON test: Status=%d, Response=%s", resp.StatusCode, string(bodyBytes))
-	// })
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
 
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// EIR_Add_68
+	t.Run("Eir_Add_68", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"1222-1666", "1222", "1666", "white"},
+			{"1333-1555", "1333", "1555", "white"},
+			{"1777-1888", "1777", "1888", "white"},
+		}
+
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
+
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode == http.StatusBadRequest {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
+
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// EIR_Add_74
+	t.Run("Eir_Add_74", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"9-1", "9", "1", "white"},
+			{"abcd12354-12345a@#@#$@#", "abcd12354", "12345a@#@#$@#", "white"},
+			{"\"1234 56789-12345\"", "\"1234 56789\"", "12345", "white"},
+		}
+
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
+
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("InsertTac request expected failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
+
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// EIR_Add_75
+	t.Run("Eir_Add_75", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"1134567890123456-1134567890123456", "1134567890123456", "1134567890123456", "."},
+			{"1134567890123456-1134567890123456", "1134567890123456", "1134567890123456", "g"},
+		}
+
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
+
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("InsertTac request expected failed for %s: %v", tc.keyTac, resp.Status)
+				continue
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
+
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// EIR_Add_82
+	t.Run("Eir_Add_82", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"12345678901234567-12345678901234567", "12345678901234567", "12345678901234567", "white"},
+			{"12345678901234567-12345678901234567", "12345678901234567", "12345678901234567", "white"},
+		}
+		i := 0
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
+
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if i == 1 {
+				if resp.StatusCode != http.StatusBadRequest {
+					t.Fatalf("InsertTac request expected failed for %s: %v", tc.keyTac, resp.Status)
+					continue
+				}
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			i++
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
+
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
+	// clean database before test
+	mockService.ClearTacInfo()
+	// EIR_Add_86
+	t.Run("Eir_Add_86", func(t *testing.T) {
+		testCases := []struct {
+			keyTac        string
+			startRangeTac string
+			endRangeTac   string
+			color         string
+		}{
+			{"1234-1235", "1234", "1235", "white"},
+			{"1232-1234", "1232", "1234", "white"},
+		}
+		i := 0
+		for _, tc := range testCases {
+			tacInfo := ports.TacInfo{
+				KeyTac:        tc.keyTac,
+				StartRangeTac: tc.startRangeTac,
+				EndRangeTac:   tc.endRangeTac,
+				Color:         tc.color,
+				PrevLink:      nil,
+			}
+
+			body, _ := json.Marshal(tacInfo)
+			url := fmt.Sprintf("http://%s/api/v1/insert-tac", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertTac request failed for %s: %v", tc.keyTac, err)
+				continue
+			}
+			if i == 1 {
+				if resp.StatusCode != http.StatusBadRequest {
+					t.Fatalf("InsertTac request expected failed for %s: %v", tc.keyTac, resp.Status)
+					continue
+				}
+			}
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			i++
+			t.Logf("TAC insertion '%s': TAC=%s-%s, Status=%d, Response=%s",
+				tc.keyTac, tc.startRangeTac, tc.endRangeTac, resp.StatusCode, string(bodyBytes))
+		}
+
+		// List all data that was inserted during the test
+		t.Logf("\n========== All Inserted TAC Data ==========")
+		for i, tac := range mockService.ListAllTacInfo() {
+			prevLinkStr := "nil"
+			if tac.PrevLink != nil && *tac.PrevLink != "" {
+				prevLinkStr = *tac.PrevLink
+			}
+
+			t.Logf("  [%d] KeyTac: %s, Range: %s-%s, Color: %s, PrevLink: %s",
+				i+1, tac.KeyTac, tac.StartRangeTac, tac.EndRangeTac, tac.Color, prevLinkStr)
+		}
+		t.Logf("==========================================\n")
+	})
 	t.Logf("PCAP file saved: %s (contains all InsertTac HTTP/2 test traffic)", pcapFile)
 	t.Log("Open in Wireshark with filter: http2 or tcp.port == 8080")
 }

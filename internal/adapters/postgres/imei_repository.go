@@ -8,6 +8,7 @@ import (
 
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/logger"
 )
 
 var (
@@ -23,6 +24,10 @@ type imeiRepository struct {
 // NewIMEIRepository creates a new PostgreSQL IMEI repository
 func NewIMEIRepository(db dbExecutor) ports.IMEIRepository {
 	return &imeiRepository{db: db}
+}
+
+func (r *imeiRepository) SetLogger(l logger.Logger) {
+	// Mock implementation - no-op for testing
 }
 
 // GetByIMEI retrieves equipment by IMEI
@@ -197,16 +202,44 @@ func (r *imeiRepository) IncrementCheckCount(ctx context.Context, imei string) e
 }
 
 // IMEI logic operations (not implemented for PostgreSQL - use in-memory for testing)
-func (r *imeiRepository) LookupImeiInfo(startRange string) (*ports.ImeiInfo, bool) {
-	return nil, false
+func (r *imeiRepository) LookupImeiInfo(ctx context.Context, startRange string) (*ports.ImeiInfo, bool) {
+	query := `SELECT startimei, endimei, color FROM imei_info WHERE startimei = $1`
+
+	var info ports.ImeiInfo
+	// Lưu ý: ports.ImeiInfo.EndIMEI nên là []string để tương thích với TEXT[]
+	err := r.db.GetContext(ctx, &info, query, startRange)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
-func (r *imeiRepository) SaveImeiInfo(info *ports.ImeiInfo) error {
-	return fmt.Errorf("not implemented")
+func (r *imeiRepository) SaveImeiInfo(ctx context.Context, info *ports.ImeiInfo) error {
+	query := `
+		INSERT INTO imei_info (startimei, endimei, color)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (startimei) 
+		DO UPDATE SET endimei = EXCLUDED.endimei, color = EXCLUDED.color
+	`
+	_, err := r.db.ExecContext(ctx, query, info.StartIMEI, info.EndIMEI, info.Color)
+	if err != nil {
+		return fmt.Errorf("failed to save imei info: %w", err)
+	}
+	return nil
 }
 
-func (r *imeiRepository) ListAllImeiInfo() []ports.ImeiInfo {
-	return []ports.ImeiInfo{}
+func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
+	query := `SELECT startimei, endimei, color FROM imei_info`
+
+	var result []ports.ImeiInfo
+	err := r.db.SelectContext(ctx, &result, query)
+	if err != nil {
+		return []ports.ImeiInfo{}
+	}
+	return result
 }
 
 func (r *imeiRepository) ClearImeiInfo() {
@@ -214,22 +247,102 @@ func (r *imeiRepository) ClearImeiInfo() {
 }
 
 // TAC logic operations (not implemented for PostgreSQL - use in-memory for testing)
-func (r *imeiRepository) SaveTacInfo(info *ports.TacInfo) error {
-	return fmt.Errorf("not implemented")
+func (r *imeiRepository) SaveTacInfo(ctx context.Context, info *ports.TacInfo) error {
+	logger.Log.Debugw("Jump into SaveTacInfo in database")
+
+	query := `
+		INSERT INTO tac_info (keytac, startrangetac, endrangetac, color, prevlink)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (keytac) 
+		DO UPDATE SET 
+			startrangetac = EXCLUDED.startrangetac, 
+			endrangetac = EXCLUDED.endrangetac, 
+			color = EXCLUDED.color, 
+			prevlink = EXCLUDED.prevlink
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		info.KeyTac, info.StartRangeTac, info.EndRangeTac, info.Color, info.PrevLink)
+	if err != nil {
+		logger.Log.Debugw("error executing SaveTacInfo: ", err)
+		return fmt.Errorf("failed to save tac info: %w", err)
+	}
+	return nil
 }
 
-func (r *imeiRepository) LookupTacInfo(key string) (*ports.TacInfo, bool) {
-	return nil, false
+func (r *imeiRepository) LookupTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
+	logger.Log.Debugw("Jump into LookupTacInfo in database")
+
+	query := `SELECT keytac, startrangetac, endrangetac, color, prevlink FROM tac_info WHERE keytac = $1`
+
+	var info ports.TacInfo
+	err := r.db.GetContext(ctx, &info, query, key)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
-func (r *imeiRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) {
-	return nil, false
+func (r *imeiRepository) PrevTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
+	logger.Log.Debugw("Jump into PrevTacInfo in database")
+
+	query := `
+		SELECT keytac, startrangetac, endrangetac, color, prevlink 
+		FROM tac_info 
+		WHERE keytac < $1 
+		ORDER BY keytac DESC 
+		LIMIT 1
+	`
+
+	var info ports.TacInfo
+	err := r.db.GetContext(ctx, &info, query, key)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
-func (r *imeiRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
-	return nil, false
+func (r *imeiRepository) NextTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
+	logger.Log.Debugw("Jump into NextTacInfo in database")
+
+	query := `
+		SELECT keytac, startrangetac, endrangetac, color, prevlink 
+		FROM tac_info 
+		WHERE keytac > $1 
+		ORDER BY keytac ASC 
+		LIMIT 1
+	`
+
+	var info ports.TacInfo
+	err := r.db.GetContext(ctx, &info, query, key)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
-func (r *imeiRepository) ListAllTacInfo() []*ports.TacInfo {
-	return []*ports.TacInfo{}
+func (r *imeiRepository) ListAllTacInfo(ctx context.Context) []*ports.TacInfo {
+	logger.Log.Debugw("Jump into ListAllTacInfo in database")
+	query := `SELECT keytac, startrangetac, endrangetac, color, prevlink FROM tac_info ORDER BY keytac ASC`
+
+	var result []*ports.TacInfo
+	err := r.db.SelectContext(ctx, &result, query)
+	if err != nil {
+		return []*ports.TacInfo{}
+	}
+	return result
+}
+
+func (r *imeiRepository) ClearTacInfo(ctx context.Context) {
+	logger.Log.Debug("Cleaning tac_info")
+	query := `DELETE FROM tac_info`
+	_, _ = r.db.ExecContext(ctx, query)
 }

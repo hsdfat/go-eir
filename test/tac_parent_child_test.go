@@ -41,7 +41,7 @@ func TestTacParentChildLinking(t *testing.T) {
 	fmt.Printf("Result: Status=%s, Error=%v\n", result1.Status, result1.Error)
 
 	// Check stored TAC info
-	allTacs := repo.ListAllTacInfo()
+	allTacs := repo.ListAllTacInfo(ctx)
 	fmt.Printf("\nTotal TAC records inserted: %d\n", len(allTacs))
 	for _, tac := range allTacs {
 		prevLink := "nil"
@@ -69,7 +69,7 @@ func TestTacParentChildLinking(t *testing.T) {
 	fmt.Printf("Result: Status=%s, Error=%v\n", result2.Status, result2.Error)
 
 	// Check stored TAC info again
-	allTacs = repo.ListAllTacInfo()
+	allTacs = repo.ListAllTacInfo(ctx)
 	fmt.Printf("\nTotal TAC records inserted: %d\n", len(allTacs))
 	for _, tac := range allTacs {
 		prevLink := "nil"
@@ -86,7 +86,7 @@ func TestTacParentChildLinking(t *testing.T) {
 	childKey := "133             -135ÿÿÿÿÿÿÿÿÿÿÿÿÿ"
 	parentKey := "133             -139ÿÿÿÿÿÿÿÿÿÿÿÿÿ"
 
-	childTac, found := repo.LookupTacInfo(childKey)
+	childTac, found := repo.LookupTacInfo(ctx, childKey)
 	if !found {
 		t.Fatalf("Child TAC not found with key: %s", childKey)
 	}

@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
+	"github.com/hsdfat8/eir/internal/adapters/postgres"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
 	"github.com/hsdfat8/eir/internal/logger"
 	legacyModels "github.com/hsdfat8/eir/models"
 	"github.com/hsdfat8/eir/pkg/logic"
+	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -31,8 +35,12 @@ func NewEIRService(
 	auditRepo ports.AuditRepository,
 	cache ports.CacheRepository,
 ) ports.EIRService {
+	_ = godotenv.Load("../../../.env")
+	dbURL := os.Getenv("DATABASE_URL")
+	db, _ := sqlx.Connect("postgres", dbURL)
+	defer db.Close()
 	return &eirService{
-		imeiRepo:  imeiRepo,
+		imeiRepo:  postgres.NewIMEIRepository(db),
 		auditRepo: auditRepo,
 		cache:     cache,
 		logger:    nil, // Use global logger by default
@@ -159,7 +167,6 @@ func (s *eirService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) (*po
 
 	s.getLogger().Infow("InsertTac started", "start_range", tacInfo.StartRangeTac, "end_range", tacInfo.EndRangeTac, "color", tacInfo.Color)
 
-
 	// Convert domain TAC info to legacy model
 	legacyTacInfo := legacyModels.TacInfo{
 		KeyTac:        tacInfo.KeyTac,
@@ -196,6 +203,10 @@ func (s *eirService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) (*po
 		Error:   errorPtr,
 		TacInfo: resultTacInfo,
 	}, nil
+}
+
+func (s *eirService) ClearTacInfo(ctx context.Context) {
+	logic.ClearTacInfo(s.imeiRepo)
 }
 
 // Helper function

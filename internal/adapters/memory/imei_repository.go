@@ -140,7 +140,7 @@ func (r *InMemoryIMEIRepository) IncrementCheckCount(ctx context.Context, imei s
 }
 
 // IMEI logic operations
-func (r *InMemoryIMEIRepository) LookupImeiInfo(startRange string) (*ports.ImeiInfo, bool) {
+func (r *InMemoryIMEIRepository) LookupImeiInfo(ctx context.Context, startRange string) (*ports.ImeiInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -148,7 +148,7 @@ func (r *InMemoryIMEIRepository) LookupImeiInfo(startRange string) (*ports.ImeiI
 	return info, ok
 }
 
-func (r *InMemoryIMEIRepository) SaveImeiInfo(info *ports.ImeiInfo) error {
+func (r *InMemoryIMEIRepository) SaveImeiInfo(ctx context.Context, info *ports.ImeiInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -156,7 +156,7 @@ func (r *InMemoryIMEIRepository) SaveImeiInfo(info *ports.ImeiInfo) error {
 	return nil
 }
 
-func (r *InMemoryIMEIRepository) ListAllImeiInfo() []ports.ImeiInfo {
+func (r *InMemoryIMEIRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -175,7 +175,7 @@ func (r *InMemoryIMEIRepository) ClearImeiInfo() {
 }
 
 // TAC logic operations
-func (r *InMemoryIMEIRepository) SaveTacInfo(info *ports.TacInfo) error {
+func (r *InMemoryIMEIRepository) SaveTacInfo(ctx context.Context, info *ports.TacInfo) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -183,7 +183,7 @@ func (r *InMemoryIMEIRepository) SaveTacInfo(info *ports.TacInfo) error {
 	return nil
 }
 
-func (r *InMemoryIMEIRepository) LookupTacInfo(key string) (*ports.TacInfo, bool) {
+func (r *InMemoryIMEIRepository) LookupTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -191,7 +191,7 @@ func (r *InMemoryIMEIRepository) LookupTacInfo(key string) (*ports.TacInfo, bool
 	return info, ok
 }
 
-func (r *InMemoryIMEIRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) {
+func (r *InMemoryIMEIRepository) PrevTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -209,7 +209,7 @@ func (r *InMemoryIMEIRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) 
 	return prev, true
 }
 
-func (r *InMemoryIMEIRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
+func (r *InMemoryIMEIRepository) NextTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -228,7 +228,7 @@ func (r *InMemoryIMEIRepository) NextTacInfo(key string) (*ports.TacInfo, bool) 
 	return next, true
 }
 
-func (r *InMemoryIMEIRepository) ListAllTacInfo() []*ports.TacInfo {
+func (r *InMemoryIMEIRepository) ListAllTacInfo(ctx context.Context) []*ports.TacInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -237,4 +237,9 @@ func (r *InMemoryIMEIRepository) ListAllTacInfo() []*ports.TacInfo {
 		result = append(result, info)
 	}
 	return result
+}
+
+// ClearTacInfo implements ports.IMEIRepository.
+func (r *InMemoryIMEIRepository) ClearTacInfo(ctx context.Context) {
+	fmt.Println("unimplemented")
 }
