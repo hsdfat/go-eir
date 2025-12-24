@@ -188,40 +188,150 @@ func (r *imeiRepository) IncrementCheckCount(ctx context.Context, imei string) e
 	return nil
 }
 
-// IMEI logic operations (not implemented for MongoDB - use in-memory for testing)
+// IMEI logic operations
 func (r *imeiRepository) LookupImeiInfo(ctx context.Context, startRange string) (*ports.ImeiInfo, bool) {
-	return nil, false
+	imeiCollection := r.collection.Database().Collection("imei_info")
+
+	var info ports.ImeiInfo
+	err := imeiCollection.FindOne(ctx, bson.M{"startimei": startRange}).Decode(&info)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
 func (r *imeiRepository) SaveImeiInfo(ctx context.Context, info *ports.ImeiInfo) error {
-	return fmt.Errorf("not implemented")
+	imeiCollection := r.collection.Database().Collection("imei_info")
+
+	filter := bson.M{"startimei": info.StartIMEI}
+	update := bson.M{
+		"$set": bson.M{
+			"startimei": info.StartIMEI,
+			"endimei":   info.EndIMEI,
+			"color":     info.Color,
+		},
+	}
+
+	opts := options.Update().SetUpsert(true)
+	_, err := imeiCollection.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return fmt.Errorf("failed to save imei info: %w", err)
+	}
+	return nil
 }
 
 func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
-	return []ports.ImeiInfo{}
+	imeiCollection := r.collection.Database().Collection("imei_info")
+
+	cursor, err := imeiCollection.Find(ctx, bson.M{})
+	if err != nil {
+		return []ports.ImeiInfo{}
+	}
+	defer cursor.Close(ctx)
+
+	var result []ports.ImeiInfo
+	if err = cursor.All(ctx, &result); err != nil {
+		return []ports.ImeiInfo{}
+	}
+	return result
 }
 
 func (r *imeiRepository) ClearImeiInfo() {
-	// No-op
+	// No-op for MongoDB - data persists in database
 }
 
-// TAC logic operations (not implemented for MongoDB - use in-memory for testing)
+// TAC logic operations
 func (r *imeiRepository) SaveTacInfo(ctx context.Context, info *ports.TacInfo) error {
-	return fmt.Errorf("not implemented")
+	tacCollection := r.collection.Database().Collection("tac_info")
+
+	filter := bson.M{"keytac": info.KeyTac}
+	update := bson.M{
+		"$set": bson.M{
+			"keytac":        info.KeyTac,
+			"startrangetac": info.StartRangeTac,
+			"endrangetac":   info.EndRangeTac,
+			"color":         info.Color,
+			"prevlink":      info.PrevLink,
+		},
+	}
+
+	opts := options.Update().SetUpsert(true)
+	_, err := tacCollection.UpdateOne(ctx, filter, update, opts)
+	if err != nil {
+		return fmt.Errorf("failed to save tac info: %w", err)
+	}
+	return nil
 }
 
 func (r *imeiRepository) LookupTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
-	return nil, false
+	tacCollection := r.collection.Database().Collection("tac_info")
+
+	var info ports.TacInfo
+	err := tacCollection.FindOne(ctx, bson.M{"keytac": key}).Decode(&info)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
 func (r *imeiRepository) PrevTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
-	return nil, false
+	tacCollection := r.collection.Database().Collection("tac_info")
+
+	filter := bson.M{"keytac": bson.M{"$lt": key}}
+	opts := options.FindOne().SetSort(bson.D{{Key: "keytac", Value: -1}})
+
+	var info ports.TacInfo
+	err := tacCollection.FindOne(ctx, filter, opts).Decode(&info)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
 func (r *imeiRepository) NextTacInfo(ctx context.Context, key string) (*ports.TacInfo, bool) {
-	return nil, false
+	tacCollection := r.collection.Database().Collection("tac_info")
+
+	filter := bson.M{"keytac": bson.M{"$gt": key}}
+	opts := options.FindOne().SetSort(bson.D{{Key: "keytac", Value: 1}})
+
+	var info ports.TacInfo
+	err := tacCollection.FindOne(ctx, filter, opts).Decode(&info)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, false
+		}
+		return nil, false
+	}
+	return &info, true
 }
 
 func (r *imeiRepository) ListAllTacInfo(ctx context.Context) []*ports.TacInfo {
-	return []*ports.TacInfo{}
+	tacCollection := r.collection.Database().Collection("tac_info")
+
+	opts := options.Find().SetSort(bson.D{{Key: "keytac", Value: 1}})
+	cursor, err := tacCollection.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return []*ports.TacInfo{}
+	}
+	defer cursor.Close(ctx)
+
+	var result []*ports.TacInfo
+	if err = cursor.All(ctx, &result); err != nil {
+		return []*ports.TacInfo{}
+	}
+	return result
+}
+
+func (r *imeiRepository) ClearTacInfo(ctx context.Context) {
+	tacCollection := r.collection.Database().Collection("tac_info")
+	_, _ = tacCollection.DeleteMany(ctx, bson.M{})
 }

@@ -226,7 +226,7 @@ func (a *MongoDBAdapter) PurgeOldHistory(ctx context.Context, beforeDate string)
 // OptimizeDatabase performs database optimization operations
 func (a *MongoDBAdapter) OptimizeDatabase(ctx context.Context) error {
 	// Run compact on collections
-	collections := []string{"equipment", "audit_log", "equipment_history", "equipment_snapshots"}
+	collections := []string{"equipment", "audit_log", "equipment_history", "equipment_snapshots", "imei_info", "tac_info"}
 
 	for _, collection := range collections {
 		var result bson.M
@@ -341,6 +341,32 @@ func (a *MongoDBAdapter) createIndexes(ctx context.Context) error {
 	_, err = a.db.Collection("equipment_snapshots").Indexes().CreateMany(ctx, snapshotIndexes)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot indexes: %w", err)
+	}
+
+	// IMEI info collection indexes
+	imeiInfoIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "startimei", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+	}
+
+	_, err = a.db.Collection("imei_info").Indexes().CreateMany(ctx, imeiInfoIndexes)
+	if err != nil {
+		return fmt.Errorf("failed to create imei_info indexes: %w", err)
+	}
+
+	// TAC info collection indexes
+	tacInfoIndexes := []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "keytac", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+	}
+
+	_, err = a.db.Collection("tac_info").Indexes().CreateMany(ctx, tacInfoIndexes)
+	if err != nil {
+		return fmt.Errorf("failed to create tac_info indexes: %w", err)
 	}
 
 	return nil
