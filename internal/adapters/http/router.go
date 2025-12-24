@@ -1,16 +1,18 @@
 package http
 
 import (
+	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/observability"
+	"github.com/hsdfat8/eir/internal/logger"
 )
 
 // ginLogger returns a gin.HandlerFunc (middleware) that logs requests using our observability logger
 func ginLogger() gin.HandlerFunc {
-	logger := observability.New("gin-http", "info")
+	logger := logger.New("gin-http", "info")
 
 	return func(c *gin.Context) {
 		// Start timer
@@ -60,18 +62,31 @@ func ginLogger() gin.HandlerFunc {
 
 // ginRecovery returns a gin.HandlerFunc (middleware) that recovers from panics and logs using our observability logger
 func ginRecovery() gin.HandlerFunc {
-	logger := observability.New("gin-recovery", "info")
+	logger := logger.New("gin-recovery", "info")
 
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
-				// Log the panic with context
+				// Get the full stack trace
+				stack := debug.Stack()
+
+				// Log the panic with full stack trace
 				logger.Errorw("Panic recovered",
 					"error", err,
 					"path", c.Request.URL.Path,
 					"method", c.Request.Method,
 					"ip", c.ClientIP(),
+					"stack", string(stack),
 				)
+
+				// Also print to stderr for immediate visibility
+				fmt.Printf("\n=== PANIC RECOVERED ===\n")
+				fmt.Printf("Error: %v\n", err)
+				fmt.Printf("Path: %s\n", c.Request.URL.Path)
+				fmt.Printf("Method: %s\n", c.Request.Method)
+				fmt.Printf("Client IP: %s\n", c.ClientIP())
+				fmt.Printf("\nStack Trace:\n%s\n", string(stack))
+				fmt.Printf("======================\n\n")
 
 				// Abort with 500 status
 				c.AbortWithStatus(500)

@@ -14,6 +14,7 @@ import (
 	"github.com/hsdfat8/eir/internal/adapters/testutil"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/logger"
 )
 
 // mockEIRService is a mock implementation of EIRService for testing
@@ -66,6 +67,10 @@ func (m *mockEIRService) GetEquipment(ctx context.Context, imei string) (*models
 
 func (m *mockEIRService) ListEquipment(ctx context.Context, offset, limit int) ([]*models.Equipment, error) {
 	return []*models.Equipment{}, nil
+}
+
+func (m *mockEIRService) SetLogger(l logger.Logger) {
+	// Mock implementation - no-op for testing
 }
 
 // TestServerBasicSetup tests basic server creation and startup

@@ -229,3 +229,7 @@ func (r *imeiRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) {
 func (r *imeiRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
 	return nil, false
 }
+
+func (r *imeiRepository) ListAllTacInfo() []*ports.TacInfo {
+	return []*ports.TacInfo{}
+}

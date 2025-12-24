@@ -1,4 +1,4 @@
-package observability
+package logger
 
 import (
 	"github.com/hsdfat/go-zlog/logger"

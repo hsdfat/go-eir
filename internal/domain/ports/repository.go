@@ -52,6 +52,7 @@ type IMEIRepository interface {
 	LookupTacInfo(key string) (*TacInfo, bool)
 	PrevTacInfo(key string) (*TacInfo, bool)
 	NextTacInfo(key string) (*TacInfo, bool)
+	ListAllTacInfo() []*TacInfo
 }
 
 // AuditRepository defines the interface for audit logging

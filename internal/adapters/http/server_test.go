@@ -16,6 +16,7 @@ import (
 	"github.com/hsdfat8/eir/internal/adapters/testutil"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/logger"
 	legacyModels "github.com/hsdfat8/eir/models"
 	"github.com/hsdfat8/eir/pkg/logic"
 	"golang.org/x/net/http2"
@@ -137,6 +138,7 @@ func (m *mockEIRService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) 
 		m.insertedTacs = []ports.TacInfo{}
 	}
 	if result.TacInfo.KeyTac != "" {
+		logger.Log.Debugw("insert new tac to memory", "tac", result.TacInfo)
 		m.insertedTacs = append(m.insertedTacs, ports.TacInfo{
 			KeyTac:        result.TacInfo.KeyTac,
 			StartRangeTac: result.TacInfo.StartRangeTac,
@@ -169,6 +171,10 @@ func (m *mockEIRService) InsertTac(ctx context.Context, tacInfo *ports.TacInfo) 
 	}, nil
 }
 
+func (m *mockEIRService) ListAllTacInfo() []*ports.TacInfo {
+	return m.imeiRepo.ListAllTacInfo()
+}
+
 func (m *mockEIRService) RemoveEquipment(ctx context.Context, imei string) error {
 	return nil
 }
@@ -182,6 +188,10 @@ func (m *mockEIRService) GetEquipment(ctx context.Context, imei string) (*models
 
 func (m *mockEIRService) ListEquipment(ctx context.Context, offset, limit int) ([]*models.Equipment, error) {
 	return []*models.Equipment{}, nil
+}
+
+func (m *mockEIRService) SetLogger(l logger.Logger) {
+	// Mock implementation - no-op for testing
 }
 
 // TestServerHTTP1Basic tests basic HTTP/1.1 server
@@ -995,8 +1005,7 @@ func TestInsertTacWithPCAP(t *testing.T) {
 
 		// List all data that was inserted during the test
 		t.Logf("\n========== All Inserted TAC Data ==========")
-		t.Logf("Total TAC records inserted: %d", len(mockService.insertedTacs))
-		for i, tac := range mockService.insertedTacs {
+		for i, tac := range mockService.ListAllTacInfo() {
 			prevLinkStr := "nil"
 			if tac.PrevLink != nil && *tac.PrevLink != "" {
 				prevLinkStr = *tac.PrevLink

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/observability"
+	"github.com/hsdfat8/eir/internal/logger"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -36,7 +36,7 @@ type Server struct {
 	listener   net.Listener
 	eirService ports.EIRService
 	router     *gin.Engine
-	logger     observability.Logger
+	logger     logger.Logger
 }
 
 // NewServer creates a new HTTP/2 server instance
@@ -61,7 +61,7 @@ func NewServer(config ServerConfig, eirService ports.EIRService) *Server {
 	router := SetupRouter(eirService)
 
 	// Initialize logger
-	log := observability.New("http-server", "info")
+	log := logger.New("http-server", "debug")
 
 	return &Server{
 		config:     config,

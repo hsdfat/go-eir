@@ -11,12 +11,12 @@ import (
 	"github.com/hsdfat8/eir/internal/adapters/memory"
 	"github.com/hsdfat8/eir/internal/config"
 	"github.com/hsdfat8/eir/internal/domain/service"
-	"github.com/hsdfat8/eir/internal/observability"
+	"github.com/hsdfat8/eir/internal/logger"
 )
 
 func main() {
 	// Initialize logger
-	logger := observability.New("eir-main", "info")
+	logger := logger.New("eir-main", "info")
 
 	// Load configuration
 	cfg, err := config.Load("")

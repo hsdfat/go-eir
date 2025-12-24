@@ -7,6 +7,7 @@ import (
 
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat8/eir/internal/logger"
 )
 
 // InMemoryIMEIRepository is an in-memory implementation for testing
@@ -194,23 +195,46 @@ func (r *InMemoryIMEIRepository) PrevTacInfo(key string) (*ports.TacInfo, bool) 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if info, ok := r.tacData[key]; ok && info.PrevLink != nil {
-		if prevInfo, exists := r.tacData[*info.PrevLink]; exists {
-			return prevInfo, true
+	var prev *ports.TacInfo
+	for k, v := range r.tacData {
+		if k < key {
+			if prev == nil || k > prev.KeyTac {
+				prev = v
+			}
 		}
 	}
-	return nil, false
+	if prev == nil {
+		return nil, false
+	}
+	return prev, true
 }
 
 func (r *InMemoryIMEIRepository) NextTacInfo(key string) (*ports.TacInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Find the TAC that has this key as its PrevLink
-	for _, info := range r.tacData {
-		if info.PrevLink != nil && *info.PrevLink == key {
-			return info, true
+	var next *ports.TacInfo
+	for k, v := range r.tacData {
+		logger.Log.Debugw("find next", "key", key, "data", k, "value", v)
+		if k > key {
+			if next == nil || k < next.KeyTac {
+				next = v
+			}
 		}
 	}
-	return nil, false
+	if next == nil {
+		return nil, false
+	}
+	return next, true
+}
+
+func (r *InMemoryIMEIRepository) ListAllTacInfo() []*ports.TacInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]*ports.TacInfo, 0, len(r.tacData))
+	for _, info := range r.tacData {
+		result = append(result, info)
+	}
+	return result
 }

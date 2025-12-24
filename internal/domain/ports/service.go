@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat8/eir/internal/logger"
 )
 
 // EIRService defines the core business operations for EIR
@@ -33,6 +34,9 @@ type EIRService interface {
 
 	// RemoveEquipment removes equipment from the database (for management)
 	RemoveEquipment(ctx context.Context, imei string) error
+
+	// SetLogger sets a custom logger for this service instance
+	SetLogger(l logger.Logger)
 }
 
 // CheckImeiResult represents the result of IMEI check
