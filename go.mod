@@ -1,9 +1,10 @@
 module github.com/hsdfat8/eir
 
-go 1.25.3
+go 1.25.5
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/chronnie/governance v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/gopacket v1.1.19
 	github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85
@@ -16,7 +17,7 @@ require (
 	github.com/spf13/viper v1.17.0
 	github.com/stretchr/testify v1.8.4
 	go.mongodb.org/mongo-driver v1.17.6
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/net v0.48.0
 )
 
@@ -93,3 +94,5 @@ require (
 replace github.com/hsdfat/diam-gw => ../diam-gw
 
 replace github.com/hsdfat/telco/utils => ../utils
+
+replace github.com/chronnie/governance => ../governance

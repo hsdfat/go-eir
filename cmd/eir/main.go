@@ -6,6 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	govclient "github.com/chronnie/governance/client"
+	"github.com/chronnie/governance/models"
 	"github.com/hsdfat8/eir/internal/adapters/diameter"
 	httpAdapter "github.com/hsdfat8/eir/internal/adapters/http"
 	"github.com/hsdfat8/eir/internal/adapters/memory"
@@ -78,12 +80,93 @@ func main() {
 
 	logger.Info("✓ Diameter S13 server started")
 
+	// Register with governance manager
+	governanceURL := os.Getenv("GOVERNANCE_URL")
+	if governanceURL == "" {
+		governanceURL = "http://telco-governance:8080"
+	}
+
+	podName := os.Getenv("POD_NAME")
+	if podName == "" {
+		podName, _ = os.Hostname()
+	}
+
+	// Create separate clients for HTTP and Diameter service groups
+	govClientHTTP := govclient.NewClient(&govclient.ClientConfig{
+		ManagerURL:  governanceURL,
+		ServiceName: "eir-http",
+		PodName:     podName,
+	})
+
+	govClientDiameter := govclient.NewClient(&govclient.ClientConfig{
+		ManagerURL:  governanceURL,
+		ServiceName: "eir-diameter",
+		PodName:     podName,
+	})
+
+	// Register EIR HTTP service group
+	httpRegistration := &models.ServiceRegistration{
+		ServiceName: "eir-http",
+		PodName:     podName,
+		Providers: []models.ProviderInfo{
+			{
+				Protocol: models.ProtocolHTTP,
+				IP:       cfg.Server.Host,
+				Port:     cfg.Server.Port,
+			},
+		},
+		HealthCheckURL:  fmt.Sprintf("http://%s:%d/health", cfg.Server.Host, cfg.Server.Port),
+		NotificationURL: fmt.Sprintf("http://%s:%d/governance/notify", cfg.Server.Host, cfg.Server.Port),
+		Subscriptions:   []string{},
+	}
+
+	if err := govClientHTTP.Register(httpRegistration); err != nil {
+		logger.Warnw("Failed to register eir-http", "error", err)
+	} else {
+		logger.Infow("✓ Registered eir-http group", "url", governanceURL)
+	}
+
+	// Register EIR Diameter service group
+	diameterRegistration := &models.ServiceRegistration{
+		ServiceName: "eir-diameter",
+		PodName:     podName,
+		Providers: []models.ProviderInfo{
+			{
+				Protocol: models.ProtocolTCP,
+				IP:       diameterConfig.ListenAddr[:len(diameterConfig.ListenAddr)-5], // Remove port
+				Port:     3868,
+			},
+		},
+		HealthCheckURL:  fmt.Sprintf("http://%s:%d/health", cfg.Server.Host, cfg.Server.Port),
+		NotificationURL: fmt.Sprintf("http://%s:%d/governance/notify", cfg.Server.Host, cfg.Server.Port),
+		Subscriptions:   []string{},
+	}
+
+	if err := govClientDiameter.Register(diameterRegistration); err != nil {
+		logger.Warnw("Failed to register eir-diameter", "error", err)
+	} else {
+		logger.Infow("✓ Registered eir-diameter group", "url", governanceURL)
+	}
+
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	logger.Info("Shutting down servers...")
+
+	// Unregister from governance
+	if err := govClientHTTP.Unregister(); err != nil {
+		logger.Warnw("Failed to unregister eir-http", "error", err)
+	} else {
+		logger.Info("✓ Unregistered eir-http group")
+	}
+
+	if err := govClientDiameter.Unregister(); err != nil {
+		logger.Warnw("Failed to unregister eir-diameter", "error", err)
+	} else {
+		logger.Info("✓ Unregistered eir-diameter group")
+	}
 
 	// Shutdown HTTP/2 server
 	if err := httpServer.Stop(); err != nil {
