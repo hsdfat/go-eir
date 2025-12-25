@@ -9,6 +9,7 @@ import (
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
 	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/lib/pq"
 )
 
 var (
@@ -218,32 +219,36 @@ func (r *imeiRepository) LookupImeiInfo(ctx context.Context, startRange string) 
 }
 
 func (r *imeiRepository) SaveImeiInfo(ctx context.Context, info *ports.ImeiInfo) error {
+	logger.Log.Debugw("Jump into SaveImeiInfo into database")
 	query := `
 		INSERT INTO imei_info (startimei, endimei, color)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (startimei) 
 		DO UPDATE SET endimei = EXCLUDED.endimei, color = EXCLUDED.color
 	`
-	_, err := r.db.ExecContext(ctx, query, info.StartIMEI, info.EndIMEI, info.Color)
+	_, err := r.db.ExecContext(ctx, query, info.StartIMEI, pq.Array(info.EndIMEI), info.Color)
 	if err != nil {
 		return fmt.Errorf("failed to save imei info: %w", err)
 	}
 	return nil
 }
 
-func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
+func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []*ports.ImeiInfo {
 	query := `SELECT startimei, endimei, color FROM imei_info`
 
-	var result []ports.ImeiInfo
+	var result []*ports.ImeiInfo
 	err := r.db.SelectContext(ctx, &result, query)
 	if err != nil {
-		return []ports.ImeiInfo{}
+		logger.Log.Errorf("CRITICAL: ListAllImeiInfo database error: %v", err)
+		return []*ports.ImeiInfo{}
 	}
 	return result
 }
 
-func (r *imeiRepository) ClearImeiInfo() {
-	// No-op
+func (r *imeiRepository) ClearImeiInfo(ctx context.Context) {
+	logger.Log.Debug("Cleaning imei_info")
+	query := `DELETE FROM imei_info`
+	_, _ = r.db.ExecContext(ctx, query)
 }
 
 // TAC logic operations (not implemented for PostgreSQL - use in-memory for testing)

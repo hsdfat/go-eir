@@ -209,6 +209,10 @@ func (s *eirService) ClearTacInfo(ctx context.Context) {
 	logic.ClearTacInfo(s.imeiRepo)
 }
 
+func (s *eirService) ClearImeiInfo(ctx context.Context) {
+	logic.ClearImeiInfo(s.imeiRepo)
+}
+
 // Helper function
 func strPtr(s string) *string {
 	return &s

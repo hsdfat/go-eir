@@ -415,6 +415,70 @@ func (h *Handler) PostInsertTac(c *gin.Context) {
 	}
 }
 
+func (h *Handler) PostInsertImei(c *gin.Context) {
+	logger.Log.Infow("HTTP PostInsertImei request", "client_ip", c.ClientIP())
+	var imeiInfo ports.ImeiInfoInsert
+
+	if err := c.ShouldBindJSON(&imeiInfo); err != nil {
+		logger.Log.Warnw("HTTP PostInsertImei invalid request body", "error", err, "client_ip", c.ClientIP())
+		c.JSON(http.StatusBadRequest, ProblemDetails{
+			Type:   "about:blank",
+			Title:  "Bad Request",
+			Status: http.StatusBadRequest,
+			Detail: "Invalid request body",
+		})
+		return
+	}
+
+	logger.Log.Infow("HTTP PostInsertImei parsed request", "imei", imeiInfo.Imei, "color", imeiInfo.Color)
+
+	// Build system status (default: normal operation)
+	systemStatus := models.SystemStatus{
+		OverloadLevel: 0,
+		TPSOverload:   false,
+	}
+
+	// Perform equipment check using TAC-based logic
+	response, err := h.eirService.InsertImei(c.Request.Context(), imeiInfo.Imei, imeiInfo.Color, systemStatus)
+	if err != nil {
+		if errors.Is(err, models.ErrInvalidIMEI) {
+			logger.Log.Warnw("HTTP PostInsertImei invalid imei info", "imei", imeiInfo.Imei, "error", err)
+			c.JSON(http.StatusBadRequest, ProblemDetails{
+				Type:   "about:blank",
+				Title:  "Invalid IMEI",
+				Status: http.StatusBadRequest,
+				Detail: err.Error(),
+			})
+			return
+		}
+
+		logger.Log.Errorw("HTTP PostInsertImei failed", "imei", imeiInfo.Imei, "error", err)
+		c.JSON(http.StatusInternalServerError, ProblemDetails{
+			Type:   "about:blank",
+			Title:  "Internal Server Error",
+			Status: http.StatusInternalServerError,
+			Detail: "Failed to check equipment status",
+		})
+		return
+	}
+
+	// Convert color to equipment status
+	var equipmentStatus models.EquipmentStatus
+	equipmentStatus = convertColorToEquipmentStatus(imeiInfo.Color)
+
+	logger.Log.Infow("HTTP PostInsertImei response", "imei", imeiInfo.Imei, "status", response.Status, "equipment_status", equipmentStatus)
+	// Return response
+	if response.Status == "error" {
+		c.JSON(http.StatusBadRequest, EirResponseData{
+			Status: equipmentStatus,
+		})
+	} else {
+		c.JSON(http.StatusCreated, EirResponseData{
+			Status: equipmentStatus,
+		})
+	}
+}
+
 // HealthCheck handles GET /health
 func (h *Handler) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{

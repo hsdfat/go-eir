@@ -156,18 +156,18 @@ func (r *InMemoryIMEIRepository) SaveImeiInfo(ctx context.Context, info *ports.I
 	return nil
 }
 
-func (r *InMemoryIMEIRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
+func (r *InMemoryIMEIRepository) ListAllImeiInfo(ctx context.Context) []*ports.ImeiInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make([]ports.ImeiInfo, 0, len(r.imeiData))
+	result := make([]*ports.ImeiInfo, 0, len(r.imeiData))
 	for _, info := range r.imeiData {
-		result = append(result, *info)
+		result = append(result, info)
 	}
 	return result
 }
 
-func (r *InMemoryIMEIRepository) ClearImeiInfo() {
+func (r *InMemoryIMEIRepository) ClearImeiInfo(ctx context.Context) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

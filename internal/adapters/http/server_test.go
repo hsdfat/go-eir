@@ -175,6 +175,16 @@ func (m *mockEIRService) ClearTacInfo() {
 	m.imeiRepo.ClearTacInfo(ctx)
 }
 
+func (m *mockEIRService) ClearImeiInfo() {
+	ctx := context.Background()
+	m.imeiRepo.ClearImeiInfo(ctx)
+}
+
+func (m *mockEIRService) ListAllImeiInfo() []*ports.ImeiInfo {
+	ctx := context.Background()
+	return m.imeiRepo.ListAllImeiInfo(ctx)
+}
+
 func (m *mockEIRService) RemoveEquipment(ctx context.Context, imei string) error {
 	return nil
 }
@@ -588,7 +598,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 		EnableH2C:  true,
 	}
 
-	mockService, _ := newMockEIRService()
+	mockService, cleanup := newMockEIRService()
+	defer cleanup()
 	server := NewServer(config, mockService)
 
 	if err := server.Start(); err != nil {
@@ -618,12 +629,36 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 		Timeout:   5 * time.Second,
 	}
 
-	// EIR_10
-	t.Run("ValidIMEICheck_EIR_10", func(t *testing.T) {
-		imei := "9"
-		url := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+	// EIR_10: Insert blacklisted IMEI then check it
+	t.Run("InsertAndCheck_Blacklisted_EIR_10", func(t *testing.T) {
+		// Clear database before test
+		mockService.ClearImeiInfo()
 
-		resp, err := client.Get(url)
+		imei := "9"
+		color := "b"
+
+		// Step 1: Insert IMEI with black color
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  imei,
+			Color: color,
+		}
+		body, _ := json.Marshal(insertReq)
+		insertURL := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+		resp, err := client.Post(insertURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("Insert IMEI request failed: %v", err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("Insert IMEI failed with status %d", resp.StatusCode)
+		}
+		t.Logf("✓ Inserted IMEI: %s with color: %s", imei, color)
+
+		// Step 2: Check IMEI
+		checkURL := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+		resp, err = client.Get(checkURL)
 		if err != nil {
 			t.Fatalf("CheckImei request failed: %v", err)
 		}
@@ -643,15 +678,39 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 			t.Errorf("Expected status %s, got %s", models.EquipmentStatusBlacklisted, result.Status)
 		}
 
-		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
+		t.Logf("✓ Check IMEI passed: IMEI=%s, Status=%s", imei, result.Status)
 	})
 
-	// EIR_11
-	t.Run("ValidIMEICheck_EIR_11", func(t *testing.T) {
-		imei := "912"
-		url := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+	// EIR_11: Insert greylisted IMEI then check it
+	t.Run("InsertAndCheck_Greylisted_EIR_11", func(t *testing.T) {
+		// Clear database before test
+		mockService.ClearImeiInfo()
 
-		resp, err := client.Get(url)
+		imei := "912"
+		color := "g"
+
+		// Step 1: Insert IMEI with grey color
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  imei,
+			Color: color,
+		}
+		body, _ := json.Marshal(insertReq)
+		insertURL := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+		resp, err := client.Post(insertURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("Insert IMEI request failed: %v", err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("Insert IMEI failed with status %d", resp.StatusCode)
+		}
+		t.Logf("✓ Inserted IMEI: %s with color: %s", imei, color)
+
+		// Step 2: Check IMEI
+		checkURL := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+		resp, err = client.Get(checkURL)
 		if err != nil {
 			t.Fatalf("CheckImei request failed: %v", err)
 		}
@@ -671,15 +730,39 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 			t.Errorf("Expected status %s, got %s", models.EquipmentStatusGreylisted, result.Status)
 		}
 
-		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
+		t.Logf("✓ Check IMEI passed: IMEI=%s, Status=%s", imei, result.Status)
 	})
 
-	// EIR_12
-	t.Run("ValidIMEICheck_EIR_12", func(t *testing.T) {
-		imei := "9123456789012"
-		url := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+	// EIR_12: Insert long blacklisted IMEI then check it
+	t.Run("InsertAndCheck_LongBlacklisted_EIR_12", func(t *testing.T) {
+		// Clear database before test
+		mockService.ClearImeiInfo()
 
-		resp, err := client.Get(url)
+		imei := "9123456789012"
+		color := "b"
+
+		// Step 1: Insert IMEI with black color
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  imei,
+			Color: color,
+		}
+		body, _ := json.Marshal(insertReq)
+		insertURL := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+		resp, err := client.Post(insertURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("Insert IMEI request failed: %v", err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("Insert IMEI failed with status %d", resp.StatusCode)
+		}
+		t.Logf("✓ Inserted IMEI: %s with color: %s", imei, color)
+
+		// Step 2: Check IMEI
+		checkURL := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+		resp, err = client.Get(checkURL)
 		if err != nil {
 			t.Fatalf("CheckImei request failed: %v", err)
 		}
@@ -699,15 +782,39 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 			t.Errorf("Expected status %s, got %s", models.EquipmentStatusBlacklisted, result.Status)
 		}
 
-		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
+		t.Logf("✓ Check IMEI passed: IMEI=%s, Status=%s", imei, result.Status)
 	})
 
-	// EIR_13
-	t.Run("ValidIMEICheck_EIR_13", func(t *testing.T) {
-		imei := "91234567895264"
-		url := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+	// EIR_13: Insert whitelisted IMEI then check it
+	t.Run("InsertAndCheck_Whitelisted_EIR_13", func(t *testing.T) {
+		// Clear database before test
+		mockService.ClearImeiInfo()
 
-		resp, err := client.Get(url)
+		imei := "91234567895264"
+		color := "w"
+
+		// Step 1: Insert IMEI with white color
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  imei,
+			Color: color,
+		}
+		body, _ := json.Marshal(insertReq)
+		insertURL := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+		resp, err := client.Post(insertURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("Insert IMEI request failed: %v", err)
+		}
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("Insert IMEI failed with status %d", resp.StatusCode)
+		}
+		t.Logf("✓ Inserted IMEI: %s with color: %s", imei, color)
+
+		// Step 2: Check IMEI
+		checkURL := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+		resp, err = client.Get(checkURL)
 		if err != nil {
 			t.Fatalf("CheckImei request failed: %v", err)
 		}
@@ -724,10 +831,10 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 		}
 
 		if result.Status != models.EquipmentStatusWhitelisted {
-			t.Errorf("Expected status ok, got %s", result.Status)
+			t.Errorf("Expected status %s, got %s", models.EquipmentStatusWhitelisted, result.Status)
 		}
 
-		t.Logf("Valid IMEI check passed: IMEI=%s, Status=%s", imei, result.Status)
+		t.Logf("✓ Check IMEI passed: IMEI=%s, Status=%s", imei, result.Status)
 	})
 
 	// Missing IMEI parameter
@@ -1589,4 +1696,393 @@ func TestInsertTacWithPCAP(t *testing.T) {
 	})
 	t.Logf("PCAP file saved: %s (contains all InsertTac HTTP/2 test traffic)", pcapFile)
 	t.Log("Open in Wireshark with filter: http2 or tcp.port == 8080")
+}
+
+// TestInsertImeiWithPCAP tests InsertImei functionality with HTTP/2 and PCAP capture
+func TestInsertImeiWithPCAP(t *testing.T) {
+	// Create PCAP writer for capturing test traffic
+	pcapFile := "http2_insert_imei_8080_test.pcap"
+	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
+	if err != nil {
+		t.Fatalf("Failed to create PCAP writer: %v", err)
+	}
+	defer pcapWriter.Close()
+
+	// Configure server for HTTP/2 (H2C)
+	config := ServerConfig{
+		ListenAddr: "127.0.0.1:8080",
+		EnableH2C:  true,
+	}
+
+	mockService, cleanup := newMockEIRService()
+	defer cleanup()
+	server := NewServer(config, mockService)
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	addr := "127.0.0.1:8080"
+	t.Logf("HTTP/2 server started on %s for InsertImei testing", addr)
+
+	// Create HTTP/2 client with PCAP capture
+	client := &http.Client{
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLS: func(network, addr string, cfg *tls.Config) (net.Conn, error) {
+				conn, err := net.Dial(network, addr)
+				if err != nil {
+					return nil, err
+				}
+				return testutil.NewCaptureConnection(conn, pcapWriter), nil
+			},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// Clear database before test
+	mockService.ClearImeiInfo()
+	// EIR_Add_1
+	t.Run("EIR_Add_1", func(t *testing.T) {
+
+		testCases := []struct {
+			imei          string
+			color         string
+			expectedError bool
+			description   string
+		}{
+			{"1", "w", false, "Valid IMEI - white"},
+		}
+
+		for _, tc := range testCases {
+			provision := ports.ImeiInfoInsert{
+				Imei:  tc.imei,
+				Color: tc.color,
+			}
+
+			body, _ := json.Marshal(provision)
+			url := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertImei request failed for %s: %v", tc.description, err)
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if tc.expectedError {
+				if resp.StatusCode == http.StatusCreated {
+					t.Errorf("InsertImei '%s' should have failed but succeeded", tc.description)
+				}
+			} else {
+				if resp.StatusCode != http.StatusCreated {
+					t.Errorf("InsertImei '%s' failed: Status=%d, Response=%s",
+						tc.description, resp.StatusCode, string(bodyBytes))
+				} else {
+					t.Logf("✓ InsertImei '%s': IMEI=%s, Color=%s, Status=%d",
+						tc.description, tc.imei, tc.color, resp.StatusCode)
+				}
+			}
+		}
+
+		// List all inserted IMEI data after insertions
+		t.Logf("\n===== All Inserted IMEI Data =====")
+		allImeis := mockService.ListAllImeiInfo()
+		if len(allImeis) == 0 {
+			t.Logf("  WARNING: No IMEI records found in database")
+			t.Logf("  Note: This may occur if data is not persisted or transactions are not committed")
+		} else {
+			for i, imei := range allImeis {
+				endImeiStr := "[]"
+				if len(imei.EndIMEI) > 0 {
+					endImeiStr = fmt.Sprintf("%v", imei.EndIMEI)
+				}
+				t.Logf("  [%d] StartIMEI: '%s', EndIMEI: %s, Color: %s",
+					i+1, imei.StartIMEI, endImeiStr, imei.Color)
+			}
+		}
+		t.Logf("Total IMEI records: %d", len(allImeis))
+		t.Logf("==================================\n")
+	})
+
+	// Clear database before test
+	mockService.ClearImeiInfo()
+	// EIR_Add_2
+	t.Run("EIR_Add_2", func(t *testing.T) {
+
+		testCases := []struct {
+			imei          string
+			color         string
+			expectedError bool
+			description   string
+		}{
+			{"123456789012345", "g", false, "Valid IMEI - grey"},
+		}
+
+		for _, tc := range testCases {
+			provision := ports.ImeiInfoInsert{
+				Imei:  tc.imei,
+				Color: tc.color,
+			}
+
+			body, _ := json.Marshal(provision)
+			url := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertImei request failed for %s: %v", tc.description, err)
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if tc.expectedError {
+				if resp.StatusCode == http.StatusCreated {
+					t.Errorf("InsertImei '%s' should have failed but succeeded", tc.description)
+				}
+			} else {
+				if resp.StatusCode != http.StatusCreated {
+					t.Errorf("InsertImei '%s' failed: Status=%d, Response=%s",
+						tc.description, resp.StatusCode, string(bodyBytes))
+				} else {
+					t.Logf("✓ InsertImei '%s': IMEI=%s, Color=%s, Status=%d",
+						tc.description, tc.imei, tc.color, resp.StatusCode)
+				}
+			}
+		}
+
+		// List all inserted IMEI data after insertions
+		t.Logf("\n===== All Inserted IMEI Data =====")
+		allImeis := mockService.ListAllImeiInfo()
+		if len(allImeis) == 0 {
+			t.Logf("  WARNING: No IMEI records found in database")
+			t.Logf("  Note: This may occur if data is not persisted or transactions are not committed")
+		} else {
+			for i, imei := range allImeis {
+				endImeiStr := "[]"
+				if len(imei.EndIMEI) > 0 {
+					endImeiStr = fmt.Sprintf("%v", imei.EndIMEI)
+				}
+				t.Logf("  [%d] StartIMEI: '%s', EndIMEI: %s, Color: %s",
+					i+1, imei.StartIMEI, endImeiStr, imei.Color)
+			}
+		}
+		t.Logf("Total IMEI records: %d", len(allImeis))
+		t.Logf("==================================\n")
+	})
+
+	// Clear database before test
+	mockService.ClearImeiInfo()
+	// EIR_Add_3
+	t.Run("EIR_Add_3", func(t *testing.T) {
+
+		testCases := []struct {
+			imei          string
+			color         string
+			expectedError bool
+			description   string
+		}{
+			{"12345678901234", "g", false, "Valid IMEI - grey"},
+		}
+
+		for _, tc := range testCases {
+			provision := ports.ImeiInfoInsert{
+				Imei:  tc.imei,
+				Color: tc.color,
+			}
+
+			body, _ := json.Marshal(provision)
+			url := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertImei request failed for %s: %v", tc.description, err)
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if tc.expectedError {
+				if resp.StatusCode == http.StatusCreated {
+					t.Errorf("InsertImei '%s' should have failed but succeeded", tc.description)
+				}
+			} else {
+				if resp.StatusCode != http.StatusCreated {
+					t.Errorf("InsertImei '%s' failed: Status=%d, Response=%s",
+						tc.description, resp.StatusCode, string(bodyBytes))
+				} else {
+					t.Logf("✓ InsertImei '%s': IMEI=%s, Color=%s, Status=%d",
+						tc.description, tc.imei, tc.color, resp.StatusCode)
+				}
+			}
+		}
+
+		// List all inserted IMEI data after insertions
+		t.Logf("\n===== All Inserted IMEI Data =====")
+		allImeis := mockService.ListAllImeiInfo()
+		if len(allImeis) == 0 {
+			t.Logf("  WARNING: No IMEI records found in database")
+			t.Logf("  Note: This may occur if data is not persisted or transactions are not committed")
+		} else {
+			for i, imei := range allImeis {
+				endImeiStr := "[]"
+				if len(imei.EndIMEI) > 0 {
+					endImeiStr = fmt.Sprintf("%v", imei.EndIMEI)
+				}
+				t.Logf("  [%d] StartIMEI: '%s', EndIMEI: %s, Color: %s",
+					i+1, imei.StartIMEI, endImeiStr, imei.Color)
+			}
+		}
+		t.Logf("Total IMEI records: %d", len(allImeis))
+		t.Logf("==================================\n")
+	})
+
+	// Clear database before test
+	mockService.ClearImeiInfo()
+	// EIR_Add_4
+	t.Run("EIR_Add_4", func(t *testing.T) {
+
+		testCases := []struct {
+			imei          string
+			color         string
+			expectedError bool
+			description   string
+		}{
+			{"12345678901234567", "g", false, "Valid IMEI - grey"},
+		}
+
+		for _, tc := range testCases {
+			provision := ports.ImeiInfoInsert{
+				Imei:  tc.imei,
+				Color: tc.color,
+			}
+
+			body, _ := json.Marshal(provision)
+			url := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertImei request failed for %s: %v", tc.description, err)
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if tc.expectedError {
+				if resp.StatusCode == http.StatusCreated {
+					t.Errorf("InsertImei '%s' should have failed but succeeded", tc.description)
+				}
+			} else {
+				if resp.StatusCode != http.StatusCreated {
+					t.Errorf("InsertImei '%s' failed: Status=%d, Response=%s",
+						tc.description, resp.StatusCode, string(bodyBytes))
+				} else {
+					t.Logf("✓ InsertImei '%s': IMEI=%s, Color=%s, Status=%d",
+						tc.description, tc.imei, tc.color, resp.StatusCode)
+				}
+			}
+		}
+
+		// List all inserted IMEI data after insertions
+		t.Logf("\n===== All Inserted IMEI Data =====")
+		allImeis := mockService.ListAllImeiInfo()
+		if len(allImeis) == 0 {
+			t.Logf("  WARNING: No IMEI records found in database")
+			t.Logf("  Note: This may occur if data is not persisted or transactions are not committed")
+		} else {
+			for i, imei := range allImeis {
+				endImeiStr := "[]"
+				if len(imei.EndIMEI) > 0 {
+					endImeiStr = fmt.Sprintf("%v", imei.EndIMEI)
+				}
+				t.Logf("  [%d] StartIMEI: '%s', EndIMEI: %s, Color: %s",
+					i+1, imei.StartIMEI, endImeiStr, imei.Color)
+			}
+		}
+		t.Logf("Total IMEI records: %d", len(allImeis))
+		t.Logf("==================================\n")
+	})
+
+	// Clear database before test
+	mockService.ClearImeiInfo()
+	// EIR_Add_5
+	t.Run("EIR_Add_5", func(t *testing.T) {
+
+		testCases := []struct {
+			imei          string
+			color         string
+			expectedError bool
+			description   string
+		}{
+			{"12345678901234", "g", false, "Valid IMEI - grey"},
+			{"123456789012341", "g", false, "Valid IMEI - grey"},
+			{"1234567890123411", "g", false, "Valid IMEI - grey"},
+			{"12345678901234111", "g", false, "Valid IMEI - grey"},
+			{"12345678901234112", "g", false, "Valid IMEI - grey"},
+			{"12345678901234222", "g", false, "Valid IMEI - grey"},
+			{"12345678901234333", "g", false, "Valid IMEI - grey"},
+			{"12345678901234", "g", false, "Valid IMEI - grey"},
+			{"12345678901234444", "g", false, "Valid IMEI - grey"},
+		}
+
+		for _, tc := range testCases {
+			provision := ports.ImeiInfoInsert{
+				Imei:  tc.imei,
+				Color: tc.color,
+			}
+
+			body, _ := json.Marshal(provision)
+			url := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("InsertImei request failed for %s: %v", tc.description, err)
+			}
+
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if tc.expectedError {
+				if resp.StatusCode == http.StatusCreated {
+					t.Errorf("InsertImei '%s' should have failed but succeeded", tc.description)
+				}
+			} else {
+				if resp.StatusCode != http.StatusCreated {
+					t.Errorf("InsertImei '%s' failed: Status=%d, Response=%s",
+						tc.description, resp.StatusCode, string(bodyBytes))
+				} else {
+					t.Logf("✓ InsertImei '%s': IMEI=%s, Color=%s, Status=%d",
+						tc.description, tc.imei, tc.color, resp.StatusCode)
+				}
+			}
+		}
+
+		// List all inserted IMEI data after insertions
+		t.Logf("\n===== All Inserted IMEI Data =====")
+		allImeis := mockService.ListAllImeiInfo()
+		if len(allImeis) == 0 {
+			t.Logf("  WARNING: No IMEI records found in database")
+			t.Logf("  Note: This may occur if data is not persisted or transactions are not committed")
+		} else {
+			for i, imei := range allImeis {
+				endImeiStr := "[]"
+				if len(imei.EndIMEI) > 0 {
+					endImeiStr = fmt.Sprintf("%v", imei.EndIMEI)
+				}
+				t.Logf("  [%d] StartIMEI: '%s', EndIMEI: %s, Color: %s",
+					i+1, imei.StartIMEI, endImeiStr, imei.Color)
+			}
+		}
+		t.Logf("Total IMEI records: %d", len(allImeis))
+		t.Logf("==================================\n")
+	})
+
+	t.Logf("\n========== Test Summary ==========")
+	t.Logf("PCAP file saved: %s", pcapFile)
+	t.Log("Open in Wireshark with filter: http2 or tcp.port == 8080")
+	t.Logf("==================================")
 }

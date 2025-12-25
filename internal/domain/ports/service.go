@@ -41,9 +41,9 @@ type EIRService interface {
 
 // CheckImeiResult represents the result of IMEI check
 type CheckImeiResult struct {
-	Status string  // "ok" or "error"
-	IMEI   string  // The checked IMEI
-	Color  string  // "b" (black), "g" (grey), "w" (white), "unknown", "overload"
+	Status string // "ok" or "error"
+	IMEI   string // The checked IMEI
+	Color  string // "b" (black), "g" (grey), "w" (white), "unknown", "overload"
 }
 
 // CheckTacResult represents the result of TAC-based check

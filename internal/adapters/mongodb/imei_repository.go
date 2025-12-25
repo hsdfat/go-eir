@@ -223,24 +223,12 @@ func (r *imeiRepository) SaveImeiInfo(ctx context.Context, info *ports.ImeiInfo)
 	return nil
 }
 
-func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []ports.ImeiInfo {
-	imeiCollection := r.collection.Database().Collection("imei_info")
-
-	cursor, err := imeiCollection.Find(ctx, bson.M{})
-	if err != nil {
-		return []ports.ImeiInfo{}
-	}
-	defer cursor.Close(ctx)
-
-	var result []ports.ImeiInfo
-	if err = cursor.All(ctx, &result); err != nil {
-		return []ports.ImeiInfo{}
-	}
-	return result
+func (r *imeiRepository) ListAllImeiInfo(ctx context.Context) []*ports.ImeiInfo {
+	return []*ports.ImeiInfo{}
 }
 
-func (r *imeiRepository) ClearImeiInfo() {
-	// No-op for MongoDB - data persists in database
+func (r *imeiRepository) ClearImeiInfo(ctx context.Context) {
+	// No-op
 }
 
 // TAC logic operations

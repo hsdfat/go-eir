@@ -179,7 +179,14 @@ func InsertImei(repo ports.IMEIRepository, imei string, color string, status mod
 		}
 
 		logger.Log.Debugw("InsertImei updating existing entry", "imei", imei, "start", start, "end", end)
-		_ = repo.SaveImeiInfo(ctx, info)
+		err := repo.SaveImeiInfo(ctx, info)
+		if err != nil {
+			logger.Log.Infow("InsertImei logic completed failed: ", "imei", imei, "start", start, "error", err.Error())
+			return models.InsertImeiResult{
+				Status: "error",
+				IMEI:   imei,
+			}
+		}
 		logger.Log.Infow("InsertImei logic completed successfully (updated)", "imei", imei, "start", start)
 		return models.InsertImeiResult{
 			Status: "ok",
@@ -188,14 +195,26 @@ func InsertImei(repo ports.IMEIRepository, imei string, color string, status mod
 	}
 
 	logger.Log.Debugw("InsertImei creating new entry", "imei", imei, "start", start, "end", end, "color", color)
-	_ = repo.SaveImeiInfo(ctx, &ports.ImeiInfo{
+	err := repo.SaveImeiInfo(ctx, &ports.ImeiInfo{
 		StartIMEI: start,
 		EndIMEI:   []string{end},
 		Color:     color,
 	})
+	if err != nil {
+		logger.Log.Infow("InsertImei logic completed failed: ", "imei", imei, "start", start, "error", err.Error())
+		return models.InsertImeiResult{
+			Status: "error",
+			IMEI:   imei,
+		}
+	}
 	logger.Log.Infow("InsertImei logic completed successfully (new)", "imei", imei, "start", start)
 	return models.InsertImeiResult{
 		Status: "ok",
 		IMEI:   imei,
 	}
+}
+
+func ClearImeiInfo(repo ports.IMEIRepository) {
+	ctx := context.Background()
+	repo.ClearImeiInfo(ctx)
 }

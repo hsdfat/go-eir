@@ -326,5 +326,6 @@ func InsertTac(repo ports.IMEIRepository, tacInfo models.TacInfo) models.InsertT
 }
 
 func ClearTacInfo(repo ports.IMEIRepository) {
-	repo.ClearImeiInfo()
+	ctx := context.Background()
+	repo.ClearTacInfo(ctx)
 }

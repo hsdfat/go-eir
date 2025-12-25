@@ -4,13 +4,19 @@ import (
 	"context"
 
 	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/lib/pq"
 )
 
 // ImeiInfo represents IMEI range information for logic operations
 type ImeiInfo struct {
 	StartIMEI string
-	EndIMEI   []string
+	EndIMEI   pq.StringArray
 	Color     string
+}
+
+type ImeiInfoInsert struct {
+	Imei  string
+	Color string
 }
 
 // IMEIRepository defines the interface for IMEI data access
@@ -44,8 +50,8 @@ type IMEIRepository interface {
 	// IMEI logic operations (for pkg/logic integration)
 	LookupImeiInfo(ctx context.Context, startRange string) (*ImeiInfo, bool)
 	SaveImeiInfo(ctx context.Context, info *ImeiInfo) error
-	ListAllImeiInfo(ctx context.Context) []ImeiInfo
-	ClearImeiInfo()
+	ListAllImeiInfo(ctx context.Context) []*ImeiInfo
+	ClearImeiInfo(ctx context.Context)
 
 	// TAC logic operations (for pkg/logic integration)
 	SaveTacInfo(ctx context.Context, info *TacInfo) error
