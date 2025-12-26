@@ -158,7 +158,7 @@ func Initialize(cfg *Config) error {
 			},
 			HealthCheckURL:  client.notifServer.GetHealthCheckURL(cfg.PodIP),
 			NotificationURL: client.notifServer.GetNotificationURL(cfg.PodIP),
-			Subscriptions:   cfg.Subscriptions,
+			Subscriptions:   nil,
 		}
 
 		resp, err := client.govClient.Register(registration)

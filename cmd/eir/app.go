@@ -145,11 +145,13 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger) *govclient.Cl
 		PodName:     podName,
 		Providers: []models.ProviderInfo{
 			{
+				ProviderID: string(models.ProviderEIRHTTP),
 				Protocol: models.ProtocolHTTP,
 				IP:       httpRegIP,
 				Port:     cfg.Server.Port,
 			},
 			{
+				ProviderID: string(models.ProviderEIRDiameter),
 				Protocol: models.ProtocolTCP,
 				IP:       diameterRegIP,
 				Port:     cfg.Diameter.Port,
@@ -157,7 +159,7 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger) *govclient.Cl
 		},
 		HealthCheckURL:  fmt.Sprintf("http://%s:%d/health", httpRegIP, cfg.Server.Port),
 		NotificationURL: fmt.Sprintf("http://%s:%d/governance/notify", httpRegIP, cfg.Server.Port),
-		Subscriptions:   []string{},
+		Subscriptions:  nil,
 	}
 
 	if _,err := govClient.Register(registration); err != nil {
