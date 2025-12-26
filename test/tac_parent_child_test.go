@@ -18,8 +18,8 @@ func TestTacParentChildLinking(t *testing.T) {
 	// Create in-memory repository
 	repo := memory.NewInMemoryIMEIRepository()
 
-	// Create EIR service (with nil audit and cache repos for testing)
-	eirService := service.NewEIRService(repo, nil, nil)
+	// Create EIR service (with nil config, audit and cache repos for testing)
+	eirService := service.NewEIRService(nil, repo, nil, nil)
 
 	ctx := context.Background()
 

@@ -28,7 +28,7 @@ func TestEIRIntegration_WithDRASimulator(t *testing.T) {
 	seedTestData(imeiRepo)
 
 	// 3. Create EIR service
-	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+	eirService := service.NewEIRService(nil, imeiRepo, auditRepo, nil)
 
 	// 4. Start DRA simulator
 	draConfig := simulator.DRAConfig{

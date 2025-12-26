@@ -32,7 +32,7 @@ func main() {
 	log.Println("✓ Mock data repositories initialized with test data")
 
 	// Initialize EIR service
-	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+	eirService := service.NewEIRService(cfg, imeiRepo, auditRepo, nil)
 
 	log.Println("✓ EIR service initialized")
 

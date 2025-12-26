@@ -36,7 +36,7 @@ func main() {
 	// TODO: Implement Redis cache adapter if cfg.Cache.Enabled
 
 	// Initialize EIR service with persistence repositories
-	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+	eirService := service.NewEIRService(cfg, imeiRepo, auditRepo, nil)
 
 	logger.Info("✓ EIR service initialized")
 

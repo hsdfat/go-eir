@@ -26,7 +26,7 @@ func TestDiameterClientToEIR(t *testing.T) {
 	seedTestData(imeiRepo)
 
 	// 2. Create EIR service
-	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+	eirService := service.NewEIRService(nil, imeiRepo, auditRepo, nil)
 
 	// 3. Start DRA simulator with EIR integration
 	draConfig := simulator.DRAConfig{

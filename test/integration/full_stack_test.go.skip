@@ -35,7 +35,7 @@ func TestFullStackIntegration(t *testing.T) {
 	// ==========================================
 	// 2. Create EIR Service (Business Logic)
 	// ==========================================
-	eirService := service.NewEIRService(imeiRepo, auditRepo, nil)
+	eirService := service.NewEIRService(nil, imeiRepo, auditRepo, nil)
 
 	t.Log("✓ EIR service created")
 

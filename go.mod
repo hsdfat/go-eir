@@ -9,7 +9,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85
 	github.com/hsdfat/go-zlog v0.0.3
-	github.com/hsdfat/telco/utils v0.0.0-00010101000000-000000000000
+	github.com/hsdfat/telco v0.0.3
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
@@ -91,8 +91,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/hsdfat/diam-gw => ../diam-gw
-
-replace github.com/hsdfat/telco/utils => ../utils
-
-replace github.com/chronnie/governance => ../governance
+replace github.com/chronnie/governance => github.com/hsdfat/governance v0.0.0-20251225001930-8535b28465c6

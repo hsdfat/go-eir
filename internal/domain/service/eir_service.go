@@ -4,16 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
-	"github.com/hsdfat8/eir/internal/adapters/postgres"
+	"github.com/hsdfat8/eir/internal/config"
 	"github.com/hsdfat8/eir/internal/domain/models"
 	"github.com/hsdfat8/eir/internal/domain/ports"
 	"github.com/hsdfat8/eir/internal/logger"
 	legacyModels "github.com/hsdfat8/eir/models"
 	"github.com/hsdfat8/eir/pkg/logic"
-	"github.com/jmoiron/sqlx"
-	"github.com/joho/godotenv"
 )
 
 var (
@@ -31,16 +28,13 @@ type eirService struct {
 
 // NewEIRService creates a new EIR service instance
 func NewEIRService(
+	cfg *config.Config,
 	imeiRepo ports.IMEIRepository,
 	auditRepo ports.AuditRepository,
 	cache ports.CacheRepository,
 ) ports.EIRService {
-	_ = godotenv.Load("../../../.env")
-	dbURL := os.Getenv("DATABASE_URL")
-	db, _ := sqlx.Connect("postgres", dbURL)
-	defer db.Close()
 	return &eirService{
-		imeiRepo:  postgres.NewIMEIRepository(db),
+		imeiRepo:  imeiRepo,
 		auditRepo: auditRepo,
 		cache:     cache,
 		logger:    nil, // Use global logger by default

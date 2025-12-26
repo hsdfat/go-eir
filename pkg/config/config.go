@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	sharedconfig "github.com/hsdfat/telco/utils/config"
+	sharedconfig "github.com/hsdfat/telco/config"
 )
 
 // Config represents the complete EIR service configuration
@@ -190,7 +190,7 @@ func NewLoader(cfg LoaderConfig) (*Loader, error) {
 
 		// Setup remote watcher for hot reload
 		if cfg.EnableHotReload && cfg.RemoteConfig.Provider == "consul" {
-			consulProvider := remoteProvider.(*sharedconfig.ConsulProvider)
+			_ = remoteProvider.(*sharedconfig.ConsulProvider)
 			// Extract client from provider (need to modify ConsulProvider to expose it)
 			// For now, we'll skip remote watching in this example
 		}
