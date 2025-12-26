@@ -168,11 +168,20 @@ func (m *mockEIRService) SetLogger(l logger.Logger) {
 // TestServerBasicSetup tests basic server creation and startup
 func TestServerBasicSetup(t *testing.T) {
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3868", // Standard Diameter port
-		OriginHost:  "eir-test.example.com",
-		OriginRealm: "example.com",
-		ProductName: "EIR-Test/1.0",
-		VendorID:    10415,
+		Host:             "127.0.0.1",
+		Port:             3868,
+		OriginHost:       "eir-test.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "EIR-Test/1.0",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService := &mockEIRService{}
@@ -216,11 +225,20 @@ func TestServerS13MEIdentityCheck(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3868", // Standard Diameter port
-		OriginHost:  "eir-test.example.com",
-		OriginRealm: "example.com",
-		ProductName: "EIR-Test/1.0",
-		VendorID:    10415,
+		Host:             "127.0.0.1",
+		Port:             3868,
+		OriginHost:       "eir-test.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "EIR-Test/1.0",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService := &mockEIRService{}
@@ -326,11 +344,20 @@ func TestServerS13MultipleRequests(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3868", // Standard Diameter port
-		OriginHost:  "eir-test.example.com",
-		OriginRealm: "example.com",
-		ProductName: "EIR-Test/1.0",
-		VendorID:    10415,
+		Host:             "127.0.0.1",
+		Port:             3868,
+		OriginHost:       "eir-test.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "EIR-Test/1.0",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService := &mockEIRService{}
@@ -421,11 +448,20 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3868",
-		OriginHost:  "eir.example.com",
-		OriginRealm: "example.com",
-		ProductName: "TestEIR",
-		VendorID:    10415,
+		Host:             "127.0.0.1",
+		Port:             3868,
+		OriginHost:       "eir.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "TestEIR",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService, cleanup := newMockEIRService()
@@ -527,9 +563,20 @@ func TestCheckTacWithPCAP(t *testing.T) {
 	defer pcapWriter.Close()
 
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3870",
-		OriginHost:  "eir.example.com",
-		OriginRealm: "example.com",
+		Host:             "127.0.0.1",
+		Port:             3870,
+		OriginHost:       "eir.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "TestEIR",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService, cleanup := newMockEIRService()
@@ -589,11 +636,20 @@ func TestInsertTacWithPCAP(t *testing.T) {
 
 	// Configure Diameter server
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3868",
-		OriginHost:  "eir.example.com",
-		OriginRealm: "example.com",
-		ProductName: "TestEIR",
-		VendorID:    10415,
+		Host:             "127.0.0.1",
+		Port:             3868,
+		OriginHost:       "eir.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "TestEIR",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService, cleanup := newMockEIRService()
@@ -1123,11 +1179,20 @@ func TestInsertImeiWithPCAP(t *testing.T) {
 
 	// Configure Diameter server
 	config := ServerConfig{
-		ListenAddr:  "127.0.0.1:3868",
-		OriginHost:  "eir.example.com",
-		OriginRealm: "example.com",
-		ProductName: "TestEIR",
-		VendorID:    10415,
+		Host:             "127.0.0.1",
+		Port:             3868,
+		OriginHost:       "eir.example.com",
+		OriginRealm:      "example.com",
+		ProductName:      "TestEIR",
+		VendorID:         10415,
+		MaxConnections:   1000,
+		ReadTimeout:      30000000000,
+		WriteTimeout:     10000000000,
+		WatchdogInterval: 30000000000,
+		WatchdogTimeout:  10000000000,
+		MaxMessageSize:   65535,
+		SendChannelSize:  100,
+		RecvChannelSize:  100,
 	}
 
 	mockService, cleanup := newMockEIRService()

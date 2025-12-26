@@ -20,6 +20,7 @@ var (
 
 // eirService implements the EIRService interface
 type eirService struct {
+	cfg       *config.Config
 	imeiRepo  ports.IMEIRepository
 	auditRepo ports.AuditRepository
 	cache     ports.CacheRepository // Optional
@@ -34,6 +35,7 @@ func NewEIRService(
 	cache ports.CacheRepository,
 ) ports.EIRService {
 	return &eirService{
+		cfg:       cfg,
 		imeiRepo:  imeiRepo,
 		auditRepo: auditRepo,
 		cache:     cache,
@@ -52,6 +54,11 @@ func (s *eirService) getLogger() logger.Logger {
 		return s.logger
 	}
 	return logger.Log
+}
+
+// GetConfig returns the service configuration
+func (s *eirService) GetConfig() *config.Config {
+	return s.cfg
 }
 
 // CheckImei performs IMEI check using pkg/logic

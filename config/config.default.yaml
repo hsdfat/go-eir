@@ -1,0 +1,79 @@
+# EIR Service Default Configuration
+# This file contains the default configuration values for the EIR service
+# You can override these values by creating a config.yaml file or using environment variables
+
+# HTTP/2 Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8081
+  readTimeout: "30s"
+  writeTimeout: "30s"
+  idleTimeout: "120s"
+
+# Database Configuration (PostgreSQL)
+database:
+  host: "localhost"
+  port: 5432
+  user: "eir"
+  password: "eir_password"
+  database: "eir"
+  sslMode: "disable"
+  maxOpenConns: 25
+  maxIdleConns: 5
+  connMaxLifetime: "5m"
+  connMaxIdleTime: "10m"
+
+# Diameter S13 Interface Configuration
+diameter:
+  host: "0.0.0.0"
+  port: 3868
+  originHost: "eir.example.com"
+  originRealm: "example.com"
+  productName: "Go-EIR"
+  vendorID: 10415
+  maxConnections: 1000
+  readTimeout: "30s"
+  writeTimeout: "10s"
+  watchdogInterval: "30s"
+  watchdogTimeout: "10s"
+  maxMessageSize: 65535
+  sendChannelSize: 100
+  recvChannelSize: 100
+
+# Cache Configuration
+cache:
+  enabled: false
+  provider: "redis"  # Options: "redis", "memcached", "inmemory"
+  redis:
+    host: "localhost"
+    port: 6379
+    password: ""
+    db: 0
+
+# Logging Configuration
+logging:
+  level: "info"       # Options: "debug", "info", "warn", "error"
+  format: "json"      # Options: "json", "text"
+  outputPath: "stdout" # Options: "stdout", "stderr", or file path
+
+# Metrics Configuration
+metrics:
+  enabled: true
+  port: 9090
+  path: "/metrics"
+
+# Governance/Service Discovery Configuration
+governance:
+  enabled: true
+  url: "http://telco-governance:8080"
+  failOnError: true  # Panic if registration fails when enabled
+
+# Environment-specific overrides can be set via environment variables:
+# EIR_DATABASE_HOST
+# EIR_DATABASE_PORT
+# EIR_DATABASE_USER
+# EIR_DATABASE_PASSWORD
+# EIR_DATABASE_DATABASE
+# EIR_SERVER_PORT
+# EIR_LOGGING_LEVEL
+# etc.

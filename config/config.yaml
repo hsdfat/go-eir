@@ -1,6 +1,6 @@
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 8082
   readTimeout: "30s"
   writeTimeout: "30s"
   idleTimeout: "120s"
@@ -18,11 +18,20 @@ database:
   connMaxIdleTime: "10m"
 
 diameter:
-  listenAddr: "0.0.0.0:3868"
+  host: "0.0.0.0"
+  port: 3769
   originHost: "eir.example.com"
   originRealm: "example.com"
   productName: "Go-EIR"
   vendorID: 10415
+  maxConnections: 1000
+  readTimeout: "30s"
+  writeTimeout: "10s"
+  watchdogInterval: "30s"
+  watchdogTimeout: "10s"
+  maxMessageSize: 65535
+  sendChannelSize: 100
+  recvChannelSize: 100
 
 cache:
   enabled: false
@@ -42,3 +51,8 @@ metrics:
   enabled: true
   port: 9090
   path: "/metrics"
+
+governance:
+  enabled: true
+  url: "http://telco-governance:8080"
+  failOnError: true
