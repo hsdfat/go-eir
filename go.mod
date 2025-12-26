@@ -91,4 +91,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/chronnie/governance => github.com/hsdfat/governance v0.0.0-20251225001930-8535b28465c6
+replace github.com/chronnie/governance => github.com/hsdfat/governance v0.0.0-20251226093837-b24f33a55ea5

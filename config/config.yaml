@@ -54,5 +54,5 @@ metrics:
 
 governance:
   enabled: true
-  url: "http://telco-governance:8080"
+  url: "http://localhost:8080"
   failOnError: true

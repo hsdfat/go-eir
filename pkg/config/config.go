@@ -10,12 +10,13 @@ import (
 
 // Config represents the complete EIR service configuration
 type Config struct {
-	Server   ServerConfig   `json:"server" yaml:"server"`
-	Database DatabaseConfig `json:"database" yaml:"database"`
-	Diameter DiameterConfig `json:"diameter" yaml:"diameter"`
-	Cache    CacheConfig    `json:"cache" yaml:"cache"`
-	Logging  LoggingConfig  `json:"logging" yaml:"logging"`
-	Metrics  MetricsConfig  `json:"metrics" yaml:"metrics"`
+	Server     ServerConfig     `json:"server" yaml:"server"`
+	Database   DatabaseConfig   `json:"database" yaml:"database"`
+	Diameter   DiameterConfig   `json:"diameter" yaml:"diameter"`
+	Cache      CacheConfig      `json:"cache" yaml:"cache"`
+	Logging    LoggingConfig    `json:"logging" yaml:"logging"`
+	Metrics    MetricsConfig    `json:"metrics" yaml:"metrics"`
+	Governance GovernanceConfig `json:"governance" yaml:"governance"`
 }
 
 // ServerConfig configures the HTTP/2 server
@@ -80,6 +81,47 @@ type MetricsConfig struct {
 	Enabled bool   `json:"enabled" yaml:"enabled" env:"ENABLED" envDefault:"true"`
 	Port    int    `json:"port" yaml:"port" env:"PORT" envDefault:"9090" validate:"min=1,max=65535"`
 	Path    string `json:"path" yaml:"path" env:"PATH" envDefault:"/metrics"`
+}
+
+// GovernanceConfig configures governance client
+type GovernanceConfig struct {
+	Enabled          bool          `json:"enabled" yaml:"enabled" env:"ENABLED" envDefault:"true"`
+	ManagerURL       string        `json:"manager_url" yaml:"manager_url" env:"MANAGER_URL" envDefault:"http://governance-manager:8080" validate:"required_if=Enabled true"`
+	ServiceName      string        `json:"service_name" yaml:"service_name" env:"SERVICE_NAME" envDefault:"eir-service" validate:"required_if=Enabled true"`
+	PodName          string        `json:"pod_name" yaml:"pod_name" env:"POD_NAME"`
+	NotificationPort int           `json:"notification_port" yaml:"notification_port" env:"NOTIFICATION_PORT" envDefault:"9001" validate:"min=1,max=65535"`
+	PodIP            string        `json:"pod_ip" yaml:"pod_ip" env:"POD_IP" envDefault:"127.0.0.1" validate:"required_if=Enabled true"`
+	Subscriptions    []string      `json:"subscriptions" yaml:"subscriptions" env:"SUBSCRIPTIONS" envDefault:"diam-gw,hss"`
+	Timeout          time.Duration `json:"timeout" yaml:"timeout" env:"TIMEOUT" envDefault:"10s"`
+}
+
+// Validate validates the governance configuration
+func (g *GovernanceConfig) Validate() error {
+	if !g.Enabled {
+		return nil
+	}
+
+	if g.ManagerURL == "" {
+		return fmt.Errorf("governance.manager_url is required when governance is enabled")
+	}
+
+	if g.ServiceName == "" {
+		return fmt.Errorf("governance.service_name is required when governance is enabled")
+	}
+
+	if g.NotificationPort < 1 || g.NotificationPort > 65535 {
+		return fmt.Errorf("governance.notification_port must be between 1 and 65535, got %d", g.NotificationPort)
+	}
+
+	if g.PodIP == "" {
+		return fmt.Errorf("governance.pod_ip is required when governance is enabled")
+	}
+
+	if g.Timeout <= 0 {
+		return fmt.Errorf("governance.timeout must be positive, got %v", g.Timeout)
+	}
+
+	return nil
 }
 
 // LoaderConfig configures how configuration is loaded

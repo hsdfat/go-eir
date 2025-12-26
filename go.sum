@@ -241,8 +241,8 @@ github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85 h1:ajcKCmmM52ybc6
 github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85/go.mod h1:9PRMWerzwBQAg/WToWQm2gOIWf56YFYJddajKOtMM0k=
 github.com/hsdfat/go-zlog v0.0.3 h1:lNZDSu5DbHMGt4QB7AwTUgSDnxAMs5tWyGVs6F7n9no=
 github.com/hsdfat/go-zlog v0.0.3/go.mod h1:fT0IzEu0cTAG/kC7YeM8BN0I+HqJOXME3nMRW2lRQKI=
-github.com/hsdfat/governance v0.0.0-20251225001930-8535b28465c6 h1:pyHpT4qpRavkCcy7frV9z2cII5s4Z6H3MB1Bf59Reew=
-github.com/hsdfat/governance v0.0.0-20251225001930-8535b28465c6/go.mod h1:S6yGzi83B1BTfupVrE7FXsRESGkOxrqhxmWYLDuKJXU=
+github.com/hsdfat/governance v0.0.0-20251226093837-b24f33a55ea5 h1:b/G+3TTh0Pxb0Ec/bwgUa2v65xYIERUKTdQmzpjRpiQ=
+github.com/hsdfat/governance v0.0.0-20251226093837-b24f33a55ea5/go.mod h1:S6yGzi83B1BTfupVrE7FXsRESGkOxrqhxmWYLDuKJXU=
 github.com/hsdfat/telco v0.0.3 h1:008hx/gU+tILoMVFGsMPWNSqhd13IqES6lv8JA/53b4=
 github.com/hsdfat/telco v0.0.3/go.mod h1:tb3eCJkg20AqXN5O/yRCeESKxduAe4Ly6toqMPlmVHM=
 github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=

@@ -141,7 +141,7 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger) *govclient.Cl
 	}
 
 	registration := &models.ServiceRegistration{
-		ServiceName: "eir",
+		ServiceName: "eir-diameter",
 		PodName:     podName,
 		Providers: []models.ProviderInfo{
 			{
@@ -160,7 +160,7 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger) *govclient.Cl
 		Subscriptions:   []string{},
 	}
 
-	if err := govClient.Register(registration); err != nil {
+	if _,err := govClient.Register(registration); err != nil {
 		if cfg.Governance.FailOnError {
 			log.Fatalw("Failed to register EIR service", "error", err)
 		}
