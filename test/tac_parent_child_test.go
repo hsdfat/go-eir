@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hsdfat8/eir/internal/adapters/memory"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/domain/service"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/adapters/memory"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/service"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 func TestTacParentChildLinking(t *testing.T) {

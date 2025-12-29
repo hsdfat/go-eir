@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hsdfat8/eir/internal/config"
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
-	legacyModels "github.com/hsdfat8/eir/models"
-	"github.com/hsdfat8/eir/pkg/logic"
+	"github.com/hsdfat/go-eir/internal/config"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
+	legacyModels "github.com/hsdfat/go-eir/models"
+	"github.com/hsdfat/go-eir/pkg/logic"
 )
 
 var (

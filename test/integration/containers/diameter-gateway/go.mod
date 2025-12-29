@@ -1,4 +1,4 @@
-module github.com/hsdfat8/eir/diameter-gateway
+module github.com/hsdfat/go-eir/diameter-gateway
 
 go 1.25.3
 

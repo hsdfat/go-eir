@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -40,7 +40,7 @@ type Server struct {
 }
 
 // NewServer creates a new HTTP/2 server instance
-func NewServer(config ServerConfig, eirService ports.EIRService) *Server {
+func NewServer(config ServerConfig, eirService ports.EIRService, log logger.Logger) *Server {
 	// Set defaults
 	if config.ReadTimeout == 0 {
 		config.ReadTimeout = 30 * time.Second
@@ -58,10 +58,7 @@ func NewServer(config ServerConfig, eirService ports.EIRService) *Server {
 		config.ShutdownTimeout = 10 * time.Second
 	}
 
-	router := SetupRouter(eirService)
-
-	// Initialize logger
-	log := logger.New("http-server", "debug")
+	router := SetupRouter(eirService, log)
 
 	return &Server{
 		config:     config,
@@ -201,4 +198,9 @@ func (s *Server) GetAddr() string {
 // IsRunning checks if the server is running
 func (s *Server) IsRunning() bool {
 	return s.httpServer != nil && s.listener != nil
+}
+
+// GetRouter returns the Gin router for adding additional routes
+func (s *Server) GetRouter() *gin.Engine {
+	return s.router
 }

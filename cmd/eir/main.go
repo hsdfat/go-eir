@@ -5,13 +5,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/hsdfat8/eir/internal/config"
-	"github.com/hsdfat8/eir/internal/domain/service"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/config"
+	"github.com/hsdfat/go-eir/internal/domain/service"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 func main() {
-	log := logger.New("eir-main", "info")
+	log := logger.New("eir", "info")
 
 	cfg, err := config.Load("")
 	if err != nil {
@@ -23,12 +23,19 @@ func main() {
 	eirService := service.NewEIRService(cfg, imeiRepo, auditRepo, nil)
 	log.Info("✓ EIR service initialized")
 
+	// Initialize servers
+	httpServer := initializeHTTPServer(cfg, eirService, log)
+	diameterServer := initializeDiameterServer(cfg, eirService, log)
+
+	// Register with governance (must be done after HTTP server is initialized)
+	govClient := registerWithGovernance(cfg, log, httpServer)
+
 	app := &Application{
 		cfg:            cfg,
 		logger:         log,
-		httpServer:     initializeHTTPServer(cfg, eirService, log),
-		diameterServer: initializeDiameterServer(cfg, eirService, log),
-		govClient:      registerWithGovernance(cfg, log),
+		httpServer:     httpServer,
+		diameterServer: diameterServer,
+		govClient:      govClient,
 	}
 
 	quit := make(chan os.Signal, 1)

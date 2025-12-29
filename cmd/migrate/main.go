@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/adapters/postgres"
+	"github.com/hsdfat/go-eir/internal/adapters/postgres"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )

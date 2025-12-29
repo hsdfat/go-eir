@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 )
 
 // extendedAuditRepository implements the ExtendedAuditRepository interface using PostgreSQL
@@ -156,14 +156,14 @@ func (r *extendedAuditRepository) GetAuditStatistics(ctx context.Context, startT
 	`
 
 	var stats struct {
-		TotalChecks          int64   `db:"total_checks"`
-		UniqueIMEIs          int64   `db:"unique_imeis"`
-		WhitelistedCount     int64   `db:"whitelisted_count"`
-		BlacklistedCount     int64   `db:"blacklisted_count"`
-		GreylistedCount      int64   `db:"greylisted_count"`
-		DiameterChecks       int64   `db:"diameter_checks"`
-		HTTPChecks           int64   `db:"http_checks"`
-		AvgProcessingTimeMs  float64 `db:"avg_processing_time_ms"`
+		TotalChecks         int64   `db:"total_checks"`
+		UniqueIMEIs         int64   `db:"unique_imeis"`
+		WhitelistedCount    int64   `db:"whitelisted_count"`
+		BlacklistedCount    int64   `db:"blacklisted_count"`
+		GreylistedCount     int64   `db:"greylisted_count"`
+		DiameterChecks      int64   `db:"diameter_checks"`
+		HTTPChecks          int64   `db:"http_checks"`
+		AvgProcessingTimeMs float64 `db:"avg_processing_time_ms"`
 	}
 
 	err := r.db.GetContext(ctx, &stats, query, startTime, endTime)
@@ -172,14 +172,14 @@ func (r *extendedAuditRepository) GetAuditStatistics(ctx context.Context, startT
 	}
 
 	result := map[string]interface{}{
-		"total_checks":            stats.TotalChecks,
-		"unique_imeis":            stats.UniqueIMEIs,
-		"whitelisted_count":       stats.WhitelistedCount,
-		"blacklisted_count":       stats.BlacklistedCount,
-		"greylisted_count":        stats.GreylistedCount,
-		"diameter_checks":         stats.DiameterChecks,
-		"http_checks":             stats.HTTPChecks,
-		"avg_processing_time_ms":  stats.AvgProcessingTimeMs,
+		"total_checks":           stats.TotalChecks,
+		"unique_imeis":           stats.UniqueIMEIs,
+		"whitelisted_count":      stats.WhitelistedCount,
+		"blacklisted_count":      stats.BlacklistedCount,
+		"greylisted_count":       stats.GreylistedCount,
+		"diameter_checks":        stats.DiameterChecks,
+		"http_checks":            stats.HTTPChecks,
+		"avg_processing_time_ms": stats.AvgProcessingTimeMs,
 	}
 
 	return result, nil

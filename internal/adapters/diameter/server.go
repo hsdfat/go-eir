@@ -9,7 +9,7 @@ import (
 	"github.com/hsdfat/diam-gw/pkg/connection"
 	"github.com/hsdfat/diam-gw/pkg/logger"
 	"github.com/hsdfat/diam-gw/server"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -69,11 +69,11 @@ type ServerConfig struct {
 
 // Server represents a Diameter S13 server
 type Server struct {
-	config      ServerConfig
-	handler     *S13Handler
-	diamServer  *server.Server
-	logger      logger.Logger
-	listenAddr  string
+	config     ServerConfig
+	handler    *S13Handler
+	diamServer *server.Server
+	logger     logger.Logger
+	listenAddr string
 }
 
 // NewServer creates a new Diameter S13 server using diam-gw server package

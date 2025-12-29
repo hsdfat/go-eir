@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/models"
 )
 
 // MockAuditRepository is a mock implementation of AuditRepository for testing
@@ -15,8 +15,8 @@ type MockAuditRepository struct {
 	nextID    int64
 
 	// Function overrides for testing
-	LogCheckFunc            func(ctx context.Context, audit *models.AuditLog) error
-	GetAuditsByIMEIFunc     func(ctx context.Context, imei string, offset, limit int) ([]*models.AuditLog, error)
+	LogCheckFunc             func(ctx context.Context, audit *models.AuditLog) error
+	GetAuditsByIMEIFunc      func(ctx context.Context, imei string, offset, limit int) ([]*models.AuditLog, error)
 	GetAuditsByTimeRangeFunc func(ctx context.Context, startTime, endTime string, offset, limit int) ([]*models.AuditLog, error)
 }
 

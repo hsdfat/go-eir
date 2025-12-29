@@ -3,8 +3,8 @@ package ports
 import (
 	"context"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 // EIRService defines the core business operations for EIR

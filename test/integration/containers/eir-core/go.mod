@@ -1,8 +1,8 @@
-module github.com/hsdfat8/eir/eir-core-test
+module github.com/hsdfat/go-eir/eir-core-test
 
 go 1.25.3
 
-require github.com/hsdfat8/eir v0.0.0-00010101000000-000000000000
+require github.com/hsdfat/go-eir v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/bytedance/sonic v1.9.1 // indirect
@@ -48,4 +48,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/hsdfat8/eir => ../../../../
+replace github.com/hsdfat/go-eir => ../../../../

@@ -1,4 +1,4 @@
-module github.com/hsdfat8/eir/simulated-dra
+module github.com/hsdfat/go-eir/simulated-dra
 
 go 1.25.3
 

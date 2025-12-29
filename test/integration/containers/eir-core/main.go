@@ -11,11 +11,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/adapters/diameter"
-	httpAdapter "github.com/hsdfat8/eir/internal/adapters/http"
-	"github.com/hsdfat8/eir/internal/config"
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/service"
+	"github.com/hsdfat/go-eir/internal/adapters/diameter"
+	httpAdapter "github.com/hsdfat/go-eir/internal/adapters/http"
+	"github.com/hsdfat/go-eir/internal/config"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/service"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 func main() {
@@ -37,7 +38,8 @@ func main() {
 	log.Println("✓ EIR service initialized")
 
 	// Initialize HTTP server
-	router := httpAdapter.SetupRouter(eirService)
+	appLog := logger.New("eir", "info")
+	router := httpAdapter.SetupRouter(eirService, appLog)
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      router,

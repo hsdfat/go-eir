@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 // InMemoryIMEIRepository is an in-memory implementation for testing

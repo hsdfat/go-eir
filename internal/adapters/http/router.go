@@ -6,14 +6,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 // ginLogger returns a gin.HandlerFunc (middleware) that logs requests using our observability logger
-func ginLogger() gin.HandlerFunc {
-	logger := logger.New("gin-http", "info")
-
+func ginLogger(logger logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Start timer
 		start := time.Now()
@@ -61,9 +59,7 @@ func ginLogger() gin.HandlerFunc {
 }
 
 // ginRecovery returns a gin.HandlerFunc (middleware) that recovers from panics and logs using our observability logger
-func ginRecovery() gin.HandlerFunc {
-	logger := logger.New("gin-recovery", "info")
-
+func ginRecovery(logger logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -97,20 +93,24 @@ func ginRecovery() gin.HandlerFunc {
 }
 
 // SetupRouter creates and configures the HTTP router
-func SetupRouter(eirService ports.EIRService) *gin.Engine {
+func SetupRouter(eirService ports.EIRService, log logger.Logger) *gin.Engine {
 	// Set Gin to release mode to disable debug logging
 	gin.SetMode(gin.ReleaseMode)
 
 	// Create router without default middleware
 	router := gin.New()
 
+	// Create sub-loggers for middleware
+	recoveryLogger := log.With("component", "gin-recovery").(logger.Logger)
+	httpLogger := log.With("component", "gin-http").(logger.Logger)
+
 	// Add custom recovery middleware (must be first)
-	router.Use(ginRecovery())
+	router.Use(ginRecovery(recoveryLogger))
 
 	// Add custom logger middleware
-	router.Use(ginLogger())
+	router.Use(ginLogger(httpLogger))
 
-	handler := NewHandler(eirService)
+	handler := NewHandler(eirService, log)
 
 	// 5G N5g-eir API (3GPP TS 29.511)
 	v1 := router.Group("/n5g-eir-eic/v1")

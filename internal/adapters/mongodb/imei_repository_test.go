@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/models"
 	"github.com/stretchr/testify/assert"
 )
 

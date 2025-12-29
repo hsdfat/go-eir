@@ -5,21 +5,23 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/domain/service"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/service"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 // Handler handles HTTP requests for the EIR service
 type Handler struct {
 	eirService ports.EIRService
+	logger     logger.Logger
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(eirService ports.EIRService) *Handler {
+func NewHandler(eirService ports.EIRService, log logger.Logger) *Handler {
 	return &Handler{
 		eirService: eirService,
+		logger:     log,
 	}
 }
 
@@ -34,10 +36,10 @@ func NewHandler(eirService ports.EIRService) *Handler {
 // @Router /equipment-status [get]
 func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 	pei := c.Query("pei")
-	logger.Log.Infow("HTTP GetEquipmentStatus request", "pei", pei, "client_ip", c.ClientIP())
+	h.logger.Infow("HTTP GetEquipmentStatus request", "pei", pei, "client_ip", c.ClientIP())
 
 	if pei == "" {
-		logger.Log.Warnw("HTTP GetEquipmentStatus missing pei parameter", "client_ip", c.ClientIP())
+		h.logger.Warnw("HTTP GetEquipmentStatus missing pei parameter", "client_ip", c.ClientIP())
 		c.JSON(http.StatusBadRequest, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Bad Request",
@@ -57,7 +59,7 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 	response, err := h.eirService.CheckTac(c.Request.Context(), pei, systemStatus)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidIMEI) {
-			logger.Log.Warnw("HTTP GetEquipmentStatus invalid PEI", "pei", pei, "error", err)
+			h.logger.Warnw("HTTP GetEquipmentStatus invalid PEI", "pei", pei, "error", err)
 			c.JSON(http.StatusBadRequest, ProblemDetails{
 				Type:   "about:blank",
 				Title:  "Invalid PEI",
@@ -67,7 +69,7 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 			return
 		}
 
-		logger.Log.Errorw("HTTP GetEquipmentStatus failed", "pei", pei, "error", err)
+		h.logger.Errorw("HTTP GetEquipmentStatus failed", "pei", pei, "error", err)
 		c.JSON(http.StatusInternalServerError, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Internal Server Error",
@@ -80,7 +82,7 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 	// Convert color to equipment status
 	equipmentStatus := convertColorToEquipmentStatus(response.Color)
 
-	logger.Log.Infow("HTTP GetEquipmentStatus response", "pei", pei, "status", equipmentStatus, "color", response.Color)
+	h.logger.Infow("HTTP GetEquipmentStatus response", "pei", pei, "status", equipmentStatus, "color", response.Color)
 	// Return response
 	c.JSON(http.StatusOK, EirResponseData{
 		Status: equipmentStatus,
@@ -245,10 +247,10 @@ func (h *Handler) ListEquipment(c *gin.Context) {
 
 func (h *Handler) GetCheckImei(c *gin.Context) {
 	imei := c.Param("imei")
-	logger.Log.Infow("HTTP GetCheckImei request", "imei", imei, "client_ip", c.ClientIP())
+	h.logger.Infow("HTTP GetCheckImei request", "imei", imei, "client_ip", c.ClientIP())
 
 	if imei == "" {
-		logger.Log.Warnw("HTTP GetCheckImei missing imei parameter", "client_ip", c.ClientIP())
+		h.logger.Warnw("HTTP GetCheckImei missing imei parameter", "client_ip", c.ClientIP())
 		c.JSON(http.StatusBadRequest, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Bad Request",
@@ -268,7 +270,7 @@ func (h *Handler) GetCheckImei(c *gin.Context) {
 	response, err := h.eirService.CheckImei(c.Request.Context(), imei, systemStatus)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidIMEI) {
-			logger.Log.Warnw("HTTP GetCheckImei invalid IMEI", "imei", imei, "error", err)
+			h.logger.Warnw("HTTP GetCheckImei invalid IMEI", "imei", imei, "error", err)
 			c.JSON(http.StatusBadRequest, ProblemDetails{
 				Type:   "about:blank",
 				Title:  "Invalid IMEI",
@@ -278,7 +280,7 @@ func (h *Handler) GetCheckImei(c *gin.Context) {
 			return
 		}
 
-		logger.Log.Errorw("HTTP GetCheckImei failed", "imei", imei, "error", err)
+		h.logger.Errorw("HTTP GetCheckImei failed", "imei", imei, "error", err)
 		c.JSON(http.StatusInternalServerError, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Internal Server Error",
@@ -291,7 +293,7 @@ func (h *Handler) GetCheckImei(c *gin.Context) {
 	// Convert color to equipment status
 	equipmentStatus := convertColorToEquipmentStatus(response.Color)
 
-	logger.Log.Infow("HTTP GetCheckImei response", "imei", imei, "status", equipmentStatus, "color", response.Color)
+	h.logger.Infow("HTTP GetCheckImei response", "imei", imei, "status", equipmentStatus, "color", response.Color)
 	// Return response
 	c.JSON(http.StatusOK, EirResponseData{
 		Status: equipmentStatus,
@@ -300,10 +302,10 @@ func (h *Handler) GetCheckImei(c *gin.Context) {
 
 func (h *Handler) GetCheckTac(c *gin.Context) {
 	imei := c.Param("imei")
-	logger.Log.Infow("HTTP GetCheckTac request", "imei", imei, "client_ip", c.ClientIP())
+	h.logger.Infow("HTTP GetCheckTac request", "imei", imei, "client_ip", c.ClientIP())
 
 	if imei == "" {
-		logger.Log.Warnw("HTTP GetCheckTac missing imei parameter", "client_ip", c.ClientIP())
+		h.logger.Warnw("HTTP GetCheckTac missing imei parameter", "client_ip", c.ClientIP())
 		c.JSON(http.StatusBadRequest, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Bad Request",
@@ -323,7 +325,7 @@ func (h *Handler) GetCheckTac(c *gin.Context) {
 	response, err := h.eirService.CheckTac(c.Request.Context(), imei, systemStatus)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidIMEI) {
-			logger.Log.Warnw("HTTP GetCheckTac invalid IMEI", "imei", imei, "error", err)
+			h.logger.Warnw("HTTP GetCheckTac invalid IMEI", "imei", imei, "error", err)
 			c.JSON(http.StatusBadRequest, ProblemDetails{
 				Type:   "about:blank",
 				Title:  "Invalid IMEI",
@@ -333,7 +335,7 @@ func (h *Handler) GetCheckTac(c *gin.Context) {
 			return
 		}
 
-		logger.Log.Errorw("HTTP GetCheckTac failed", "imei", imei, "error", err)
+		h.logger.Errorw("HTTP GetCheckTac failed", "imei", imei, "error", err)
 		c.JSON(http.StatusInternalServerError, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Internal Server Error",
@@ -346,7 +348,7 @@ func (h *Handler) GetCheckTac(c *gin.Context) {
 	// Convert color to equipment status
 	equipmentStatus := convertColorToEquipmentStatus(response.Color)
 
-	logger.Log.Infow("HTTP GetCheckTac response", "imei", imei, "status", equipmentStatus, "color", response.Color)
+	h.logger.Infow("HTTP GetCheckTac response", "imei", imei, "status", equipmentStatus, "color", response.Color)
 	// Return response
 	c.JSON(http.StatusOK, EirResponseData{
 		Status: equipmentStatus,
@@ -354,11 +356,11 @@ func (h *Handler) GetCheckTac(c *gin.Context) {
 }
 
 func (h *Handler) PostInsertTac(c *gin.Context) {
-	logger.Log.Infow("HTTP PostInsertTac request", "client_ip", c.ClientIP())
+	h.logger.Infow("HTTP PostInsertTac request", "client_ip", c.ClientIP())
 	var tacInfo ports.TacInfo
 
 	if err := c.ShouldBindJSON(&tacInfo); err != nil {
-		logger.Log.Warnw("HTTP PostInsertTac invalid request body", "error", err, "client_ip", c.ClientIP())
+		h.logger.Warnw("HTTP PostInsertTac invalid request body", "error", err, "client_ip", c.ClientIP())
 		c.JSON(http.StatusBadRequest, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Bad Request",
@@ -368,13 +370,13 @@ func (h *Handler) PostInsertTac(c *gin.Context) {
 		return
 	}
 
-	logger.Log.Infow("HTTP PostInsertTac parsed request", "start_range", tacInfo.StartRangeTac, "end_range", tacInfo.EndRangeTac, "color", tacInfo.Color)
+	h.logger.Infow("HTTP PostInsertTac parsed request", "start_range", tacInfo.StartRangeTac, "end_range", tacInfo.EndRangeTac, "color", tacInfo.Color)
 
 	// Perform equipment check using TAC-based logic
 	response, err := h.eirService.InsertTac(c.Request.Context(), &tacInfo)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidIMEI) {
-			logger.Log.Warnw("HTTP PostInsertTac invalid TAC info", "start_range", tacInfo.StartRangeTac, "error", err)
+			h.logger.Warnw("HTTP PostInsertTac invalid TAC info", "start_range", tacInfo.StartRangeTac, "error", err)
 			c.JSON(http.StatusBadRequest, ProblemDetails{
 				Type:   "about:blank",
 				Title:  "Invalid IMEI",
@@ -384,7 +386,7 @@ func (h *Handler) PostInsertTac(c *gin.Context) {
 			return
 		}
 
-		logger.Log.Errorw("HTTP PostInsertTac failed", "start_range", tacInfo.StartRangeTac, "error", err)
+		h.logger.Errorw("HTTP PostInsertTac failed", "start_range", tacInfo.StartRangeTac, "error", err)
 		c.JSON(http.StatusInternalServerError, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Internal Server Error",
@@ -402,7 +404,7 @@ func (h *Handler) PostInsertTac(c *gin.Context) {
 		equipmentStatus = convertColorToEquipmentStatus(tacInfo.Color)
 	}
 
-	logger.Log.Infow("HTTP PostInsertTac response", "start_range", tacInfo.StartRangeTac, "status", response.Status, "equipment_status", equipmentStatus)
+	h.logger.Infow("HTTP PostInsertTac response", "start_range", tacInfo.StartRangeTac, "status", response.Status, "equipment_status", equipmentStatus)
 	// Return response
 	if response.Status == "error" {
 		c.JSON(http.StatusBadRequest, EirResponseData{
@@ -416,11 +418,11 @@ func (h *Handler) PostInsertTac(c *gin.Context) {
 }
 
 func (h *Handler) PostInsertImei(c *gin.Context) {
-	logger.Log.Infow("HTTP PostInsertImei request", "client_ip", c.ClientIP())
+	h.logger.Infow("HTTP PostInsertImei request", "client_ip", c.ClientIP())
 	var imeiInfo ports.ImeiInfoInsert
 
 	if err := c.ShouldBindJSON(&imeiInfo); err != nil {
-		logger.Log.Warnw("HTTP PostInsertImei invalid request body", "error", err, "client_ip", c.ClientIP())
+		h.logger.Warnw("HTTP PostInsertImei invalid request body", "error", err, "client_ip", c.ClientIP())
 		c.JSON(http.StatusBadRequest, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Bad Request",
@@ -430,7 +432,7 @@ func (h *Handler) PostInsertImei(c *gin.Context) {
 		return
 	}
 
-	logger.Log.Infow("HTTP PostInsertImei parsed request", "imei", imeiInfo.Imei, "color", imeiInfo.Color)
+	h.logger.Infow("HTTP PostInsertImei parsed request", "imei", imeiInfo.Imei, "color", imeiInfo.Color)
 
 	// Build system status (default: normal operation)
 	systemStatus := models.SystemStatus{
@@ -442,7 +444,7 @@ func (h *Handler) PostInsertImei(c *gin.Context) {
 	response, err := h.eirService.InsertImei(c.Request.Context(), imeiInfo.Imei, imeiInfo.Color, systemStatus)
 	if err != nil {
 		if errors.Is(err, models.ErrInvalidIMEI) {
-			logger.Log.Warnw("HTTP PostInsertImei invalid imei info", "imei", imeiInfo.Imei, "error", err)
+			h.logger.Warnw("HTTP PostInsertImei invalid imei info", "imei", imeiInfo.Imei, "error", err)
 			c.JSON(http.StatusBadRequest, ProblemDetails{
 				Type:   "about:blank",
 				Title:  "Invalid IMEI",
@@ -452,7 +454,7 @@ func (h *Handler) PostInsertImei(c *gin.Context) {
 			return
 		}
 
-		logger.Log.Errorw("HTTP PostInsertImei failed", "imei", imeiInfo.Imei, "error", err)
+		h.logger.Errorw("HTTP PostInsertImei failed", "imei", imeiInfo.Imei, "error", err)
 		c.JSON(http.StatusInternalServerError, ProblemDetails{
 			Type:   "about:blank",
 			Title:  "Internal Server Error",
@@ -466,7 +468,7 @@ func (h *Handler) PostInsertImei(c *gin.Context) {
 	var equipmentStatus models.EquipmentStatus
 	equipmentStatus = convertColorToEquipmentStatus(imeiInfo.Color)
 
-	logger.Log.Infow("HTTP PostInsertImei response", "imei", imeiInfo.Imei, "status", response.Status, "equipment_status", equipmentStatus)
+	h.logger.Infow("HTTP PostInsertImei response", "imei", imeiInfo.Imei, "status", response.Status, "equipment_status", equipmentStatus)
 	// Return response
 	if response.Status == "error" {
 		c.JSON(http.StatusBadRequest, EirResponseData{

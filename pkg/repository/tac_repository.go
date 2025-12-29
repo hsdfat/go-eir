@@ -3,10 +3,8 @@ package repository
 import (
 	"sort"
 
-	"github.com/hsdfat8/eir/models"
+	"github.com/hsdfat/go-eir/models"
 )
-
-
 
 type InMemoryTacRepo struct {
 	data map[string]*models.TacInfo

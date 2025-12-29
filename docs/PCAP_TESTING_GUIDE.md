@@ -38,7 +38,7 @@ The PCAP testing framework allows you to:
 ```go
 import (
     "testing"
-    "github.com/hsdfat8/eir/internal/adapters/testutil"
+    "github.com/hsdfat/go-eir/internal/adapters/testutil"
 )
 ```
 
@@ -87,7 +87,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hsdfat8/eir/internal/adapters/testutil"
+    "github.com/hsdfat/go-eir/internal/adapters/testutil"
 )
 
 func TestHTTP1WithPCAP(t *testing.T) {
@@ -190,7 +190,7 @@ import (
     "testing"
     "time"
 
-    "github.com/hsdfat8/eir/internal/adapters/testutil"
+    "github.com/hsdfat/go-eir/internal/adapters/testutil"
 )
 
 func TestDiameterS13WithPCAP(t *testing.T) {

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/hsdfat8/eir/config"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
-	"github.com/hsdfat8/eir/models"
-	"github.com/hsdfat8/eir/utils"
+	"github.com/hsdfat/go-eir/config"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
+	"github.com/hsdfat/go-eir/models"
+	"github.com/hsdfat/go-eir/utils"
 )
 
 var tacMaxLength int

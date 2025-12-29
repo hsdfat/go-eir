@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/logger"
 	"github.com/joho/godotenv"
 )
 

@@ -9,10 +9,10 @@ import (
 	"github.com/hsdfat/diam-gw/commands/s13"
 	"github.com/hsdfat/diam-gw/models_base"
 	"github.com/hsdfat/diam-gw/simulator"
-	"github.com/hsdfat8/eir/internal/adapters/mocks"
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/domain/service"
+	"github.com/hsdfat/go-eir/internal/adapters/mocks"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/service"
 )
 
 // TestEIRIntegration_WithDRASimulator tests EIR integration with DRA simulator

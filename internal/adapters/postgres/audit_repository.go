@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 )
 
 // auditRepository implements the AuditRepository interface using PostgreSQL

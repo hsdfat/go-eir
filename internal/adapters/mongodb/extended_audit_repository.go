@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -104,7 +104,7 @@ func (r *extendedAuditRepository) GetAuditStatistics(ctx context.Context, startT
 		},
 		{
 			"$group": bson.M{
-				"_id": nil,
+				"_id":          nil,
 				"total_checks": bson.M{"$sum": 1},
 				"unique_imeis": bson.M{"$addToSet": "$imei"},
 				"whitelisted_count": bson.M{

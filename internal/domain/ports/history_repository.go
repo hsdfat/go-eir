@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/models"
 )
 
 // HistoryRepository defines the interface for equipment change history tracking

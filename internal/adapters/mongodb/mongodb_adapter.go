@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -15,14 +15,14 @@ import (
 
 // MongoDBAdapter implements the DatabaseAdapter interface for MongoDB
 type MongoDBAdapter struct {
-	client              *mongo.Client
-	db                  *mongo.Database
-	config              *ports.MongoDBConfig
-	imeiRepo            ports.IMEIRepository
-	auditRepo           ports.AuditRepository
-	extendedAuditRepo   ports.ExtendedAuditRepository
-	historyRepo         ports.HistoryRepository
-	snapshotRepo        ports.SnapshotRepository
+	client            *mongo.Client
+	db                *mongo.Database
+	config            *ports.MongoDBConfig
+	imeiRepo          ports.IMEIRepository
+	auditRepo         ports.AuditRepository
+	extendedAuditRepo ports.ExtendedAuditRepository
+	historyRepo       ports.HistoryRepository
+	snapshotRepo      ports.SnapshotRepository
 }
 
 // NewMongoDBAdapter creates a new MongoDB database adapter

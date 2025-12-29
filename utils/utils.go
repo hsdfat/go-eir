@@ -1,6 +1,6 @@
 package utils
 
-import "github.com/hsdfat8/eir/models"
+import "github.com/hsdfat/go-eir/models"
 
 func IsOverLoad(status models.SystemStatus) bool {
 	return false

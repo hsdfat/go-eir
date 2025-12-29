@@ -149,7 +149,7 @@ export EIR_LOGGING_LEVEL=debug
 
 ### Programmatic Usage
 ```go
-import "github.com/hsdfat8/eir/internal/config"
+import "github.com/hsdfat/go-eir/internal/config"
 
 // Load default config
 cfg, err := config.Load("")

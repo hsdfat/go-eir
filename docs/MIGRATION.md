@@ -251,7 +251,7 @@ To integrate auto-migration into your application startup:
 
 ```go
 import (
-    "github.com/hsdfat8/eir/internal/adapters/postgres"
+    "github.com/hsdfat/go-eir/internal/adapters/postgres"
     "github.com/jmoiron/sqlx"
 )
 

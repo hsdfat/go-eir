@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 )
 
 // snapshotRepository implements the SnapshotRepository interface using PostgreSQL

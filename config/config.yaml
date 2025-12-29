@@ -1,6 +1,6 @@
 server:
   host: "0.0.0.0"
-  port: 8082
+  port: 8085
   readTimeout: "30s"
   writeTimeout: "30s"
   idleTimeout: "120s"
@@ -19,7 +19,7 @@ database:
 
 diameter:
   host: "0.0.0.0"
-  port: 3769
+  port: 3765
   originHost: "eir.example.com"
   originRealm: "example.com"
   productName: "Go-EIR"
@@ -51,8 +51,3 @@ metrics:
   enabled: true
   port: 9090
   path: "/metrics"
-
-governance:
-  enabled: true
-  url: "http://localhost:8080"
-  failOnError: true

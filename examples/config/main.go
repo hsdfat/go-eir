@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	eirconfig "github.com/hsdfat8/eir/pkg/config"
+	eirconfig "github.com/hsdfat/go-eir/pkg/config"
 )
 
 func main() {

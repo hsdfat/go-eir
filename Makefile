@@ -49,7 +49,7 @@ build:
 ## run: Run the application locally
 run:
 	@echo "Running $(APP_NAME)..."
-	@$(GOCMD) run ./cmd/eir/main.go
+	@$(GOCMD) run ./cmd/eir
 
 ## test: Run unit tests
 test:

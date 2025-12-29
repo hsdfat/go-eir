@@ -6,23 +6,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/models"
 )
 
 // MockIMEIRepository is a mock implementation of IMEIRepository for testing
 type MockIMEIRepository struct {
-	mu            sync.RWMutex
-	equipment     map[string]*models.Equipment // keyed by IMEI
-	nextID        int64
+	mu        sync.RWMutex
+	equipment map[string]*models.Equipment // keyed by IMEI
+	nextID    int64
 
 	// Function overrides for testing
-	GetByIMEIFunc          func(ctx context.Context, imei string) (*models.Equipment, error)
-	GetByIMEISVFunc        func(ctx context.Context, imeisv string) (*models.Equipment, error)
-	CreateFunc             func(ctx context.Context, equipment *models.Equipment) error
-	UpdateFunc             func(ctx context.Context, equipment *models.Equipment) error
-	DeleteFunc             func(ctx context.Context, imei string) error
-	ListFunc               func(ctx context.Context, offset, limit int) ([]*models.Equipment, error)
-	ListByStatusFunc       func(ctx context.Context, status models.EquipmentStatus, offset, limit int) ([]*models.Equipment, error)
+	GetByIMEIFunc           func(ctx context.Context, imei string) (*models.Equipment, error)
+	GetByIMEISVFunc         func(ctx context.Context, imeisv string) (*models.Equipment, error)
+	CreateFunc              func(ctx context.Context, equipment *models.Equipment) error
+	UpdateFunc              func(ctx context.Context, equipment *models.Equipment) error
+	DeleteFunc              func(ctx context.Context, imei string) error
+	ListFunc                func(ctx context.Context, offset, limit int) ([]*models.Equipment, error)
+	ListByStatusFunc        func(ctx context.Context, status models.EquipmentStatus, offset, limit int) ([]*models.Equipment, error)
 	IncrementCheckCountFunc func(ctx context.Context, imei string) error
 }
 
@@ -256,12 +256,12 @@ func (m *MockIMEIRepository) copyEquipment(e *models.Equipment) *models.Equipmen
 	}
 
 	copy := &models.Equipment{
-		ID:               e.ID,
-		IMEI:             e.IMEI,
-		Status:           e.Status,
-		LastUpdated:      e.LastUpdated,
-		CheckCount:       e.CheckCount,
-		AddedBy:          e.AddedBy,
+		ID:          e.ID,
+		IMEI:        e.IMEI,
+		Status:      e.Status,
+		LastUpdated: e.LastUpdated,
+		CheckCount:  e.CheckCount,
+		AddedBy:     e.AddedBy,
 	}
 
 	if e.IMEISV != nil {

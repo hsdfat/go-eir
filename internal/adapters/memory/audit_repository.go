@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 )
 
 // InMemoryAuditRepository is an in-memory implementation for testing

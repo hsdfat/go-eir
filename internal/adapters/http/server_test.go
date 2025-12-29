@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/adapters/postgres"
-	"github.com/hsdfat8/eir/internal/adapters/testutil"
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
-	legacyModels "github.com/hsdfat8/eir/models"
-	"github.com/hsdfat8/eir/pkg/logic"
+	"github.com/hsdfat/go-eir/internal/adapters/postgres"
+	"github.com/hsdfat/go-eir/internal/adapters/testutil"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
+	legacyModels "github.com/hsdfat/go-eir/models"
+	"github.com/hsdfat/go-eir/pkg/logic"
 	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
 	"golang.org/x/net/http2"
@@ -211,7 +211,8 @@ func TestServerHTTP1Basic(t *testing.T) {
 	}
 
 	mockService, _ := newMockEIRService()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -245,7 +246,8 @@ func TestServerHTTP1WithPCAP(t *testing.T) {
 	}
 
 	mockService, _ := newMockEIRService()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -362,7 +364,8 @@ func TestServerH2C(t *testing.T) {
 	}
 
 	mockService, _ := newMockEIRService()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -481,7 +484,8 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 	}
 
 	mockService, _ := newMockEIRService()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -565,7 +569,8 @@ func TestServerGracefulShutdown(t *testing.T) {
 	}
 
 	mockService, _ := newMockEIRService()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -600,7 +605,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -900,7 +906,8 @@ func TestCheckTacWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -1106,7 +1113,8 @@ func TestInsertTacWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -1716,7 +1724,8 @@ func TestInsertImeiWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)

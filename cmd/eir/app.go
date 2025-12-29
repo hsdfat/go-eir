@@ -7,12 +7,13 @@ import (
 
 	govclient "github.com/chronnie/governance/client"
 	"github.com/chronnie/governance/models"
-	"github.com/hsdfat8/eir/internal/adapters/diameter"
-	httpAdapter "github.com/hsdfat8/eir/internal/adapters/http"
-	"github.com/hsdfat8/eir/internal/adapters/memory"
-	"github.com/hsdfat8/eir/internal/config"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/gin-gonic/gin"
+	"github.com/hsdfat/go-eir/internal/adapters/diameter"
+	httpAdapter "github.com/hsdfat/go-eir/internal/adapters/http"
+	"github.com/hsdfat/go-eir/internal/adapters/memory"
+	"github.com/hsdfat/go-eir/internal/config"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 // Application holds the application state
@@ -68,7 +69,9 @@ func initializeHTTPServer(cfg *config.Config, eirService ports.EIRService, log l
 		EnableH2C:    true, // Enable HTTP/2 Cleartext for testing
 	}
 
-	httpServer := httpAdapter.NewServer(httpServerConfig, eirService)
+	// Create HTTP server logger with mod: eir
+	httpLog := log.With("component", "http-server").(logger.Logger)
+	httpServer := httpAdapter.NewServer(httpServerConfig, eirService, httpLog)
 
 	if err := httpServer.Start(); err != nil {
 		log.Fatalw("Failed to start HTTP server", "error", err)
@@ -108,27 +111,41 @@ func initializeDiameterServer(cfg *config.Config, eirService ports.EIRService, l
 }
 
 // registerWithGovernance handles governance/service discovery registration
-func registerWithGovernance(cfg *config.Config, log logger.Logger) *govclient.Client {
+func registerWithGovernance(cfg *config.Config, log logger.Logger, httpServer *httpAdapter.Server) *govclient.Client {
 	if !cfg.Governance.Enabled {
 		log.Info("Governance registration disabled")
 		return nil
 	}
 
+	// Governance URL is now loaded from environment variables via pkg/config/env
 	governanceURL := cfg.Governance.URL
-	if envURL := os.Getenv("GOVERNANCE_URL"); envURL != "" {
-		governanceURL = envURL
-	}
 
 	podName := os.Getenv("POD_NAME")
 	if podName == "" {
 		podName, _ = os.Hostname()
 	}
 
+	// Create governance client
 	govClient := govclient.NewClient(&govclient.ClientConfig{
 		ManagerURL:  governanceURL,
 		ServiceName: "eir",
 		PodName:     podName,
 	})
+
+	// Add governance endpoints to HTTP server using the new handler functions
+	router := httpServer.GetRouter()
+	governance := router.Group("/governance")
+	{
+		// Use gin wrapper to convert http.HandlerFunc to gin.HandlerFunc
+		governance.POST("/notify", func(c *gin.Context) {
+			govClient.CreateNotificationHandler()(c.Writer, c.Request)
+		})
+		governance.Any("/heartbeat", func(c *gin.Context) {
+			govClient.CreateHeartbeatHandler(nil)(c.Writer, c.Request)
+		})
+	}
+
+	log.Info("✓ Governance HTTP endpoints added to router")
 
 	httpRegIP := getRegistrationIP(cfg.Server.Host)
 	diameterRegIP := getRegistrationIP(cfg.Diameter.Host)
@@ -141,35 +158,45 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger) *govclient.Cl
 	}
 
 	registration := &models.ServiceRegistration{
-		ServiceName: "eir-diameter",
+		ServiceName: models.ServiceNameEir,
 		PodName:     podName,
 		Providers: []models.ProviderInfo{
 			{
 				ProviderID: string(models.ProviderEIRHTTP),
-				Protocol: models.ProtocolHTTP,
-				IP:       httpRegIP,
-				Port:     cfg.Server.Port,
+				Protocol:   models.ProtocolHTTP,
+				IP:         httpRegIP,
+				Port:       cfg.Server.Port,
 			},
 			{
 				ProviderID: string(models.ProviderEIRDiameter),
-				Protocol: models.ProtocolTCP,
-				IP:       diameterRegIP,
-				Port:     cfg.Diameter.Port,
+				Protocol:   models.ProtocolTCP,
+				IP:         diameterRegIP,
+				Port:       cfg.Diameter.Port,
 			},
 		},
 		HealthCheckURL:  fmt.Sprintf("http://%s:%d/health", httpRegIP, cfg.Server.Port),
 		NotificationURL: fmt.Sprintf("http://%s:%d/governance/notify", httpRegIP, cfg.Server.Port),
-		Subscriptions:  nil,
+		Subscriptions:   nil,
 	}
 
-	if _,err := govClient.Register(registration); err != nil {
+	if _, err := govClient.Register(registration); err != nil {
 		if cfg.Governance.FailOnError {
 			log.Fatalw("Failed to register EIR service", "error", err)
 		}
 		log.Warnw("Failed to register EIR service", "error", err)
 	} else {
-		log.Infow("✓ Registered EIR service with multiple providers", "url", governanceURL, "providers", len(registration.Providers))
+		log.Infow("✓ Registered EIR service with multiple providers",
+			"url", governanceURL,
+			"service", registration.ServiceName,
+			"pod", podName,
+			"providers", registration.Providers,
+			"subcriptions", registration.Subscriptions,
+		)
 	}
+
+	// Start heartbeat
+	govClient.StartHeartbeat()
+	log.Info("✓ Started governance heartbeat")
 
 	return govClient
 }
@@ -179,6 +206,7 @@ func (app *Application) shutdown() {
 	app.logger.Info("Shutting down servers...")
 
 	if app.govClient != nil {
+		app.govClient.StopHeartbeat()
 		if err := app.govClient.Unregister(); err != nil {
 			app.logger.Warnw("Failed to unregister EIR service", "error", err)
 		} else {

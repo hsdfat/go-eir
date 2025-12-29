@@ -6,9 +6,9 @@ import (
 
 	"github.com/hsdfat/diam-gw/commands/s13"
 	"github.com/hsdfat/diam-gw/models_base"
-	"github.com/hsdfat8/eir/internal/domain/models"
-	"github.com/hsdfat8/eir/internal/domain/ports"
-	"github.com/hsdfat8/eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/domain/models"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/logger"
 )
 
 const (

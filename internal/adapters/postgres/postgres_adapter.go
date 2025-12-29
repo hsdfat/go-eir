@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
 // PostgresAdapter implements the DatabaseAdapter interface for PostgreSQL
 type PostgresAdapter struct {
-	db                      *sqlx.DB
-	config                  *ports.PostgresConfig
-	imeiRepo                ports.IMEIRepository
-	auditRepo               ports.AuditRepository
-	extendedAuditRepo       ports.ExtendedAuditRepository
-	historyRepo             ports.HistoryRepository
-	snapshotRepo            ports.SnapshotRepository
+	db                *sqlx.DB
+	config            *ports.PostgresConfig
+	imeiRepo          ports.IMEIRepository
+	auditRepo         ports.AuditRepository
+	extendedAuditRepo ports.ExtendedAuditRepository
+	historyRepo       ports.HistoryRepository
+	snapshotRepo      ports.SnapshotRepository
 }
 
 // NewPostgresAdapter creates a new PostgreSQL database adapter
@@ -144,12 +144,12 @@ func (a *PostgresAdapter) GetConnectionStats() ports.ConnectionStats {
 	stats := a.db.Stats()
 
 	return ports.ConnectionStats{
-		OpenConnections: stats.OpenConnections,
-		IdleConnections: stats.Idle,
-		MaxConnections:  a.config.MaxOpenConns,
-		DatabaseType:    string(ports.DatabaseTypePostgreSQL),
+		OpenConnections:  stats.OpenConnections,
+		IdleConnections:  stats.Idle,
+		MaxConnections:   a.config.MaxOpenConns,
+		DatabaseType:     string(ports.DatabaseTypePostgreSQL),
 		ConnectionString: fmt.Sprintf("%s:%d/%s", a.config.Host, a.config.Port, a.config.Database),
-		Healthy:         a.Ping(context.Background()) == nil,
+		Healthy:          a.Ping(context.Background()) == nil,
 	}
 }
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hsdfat8/eir/internal/adapters/mongodb"
-	"github.com/hsdfat8/eir/internal/adapters/postgres"
-	"github.com/hsdfat8/eir/internal/domain/ports"
+	"github.com/hsdfat/go-eir/internal/adapters/mongodb"
+	"github.com/hsdfat/go-eir/internal/adapters/postgres"
+	"github.com/hsdfat/go-eir/internal/domain/ports"
 )
 
 // DatabaseAdapterFactory creates database adapters based on configuration
@@ -143,9 +143,9 @@ func GetDefaultPostgresConfig() *ports.PostgresConfig {
 		SSLMode:         "disable",
 		MaxOpenConns:    25,
 		MaxIdleConns:    5,
-		ConnMaxLifetime: 300,  // 5 minutes
-		ConnMaxIdleTime: 600,  // 10 minutes
-		QueryTimeout:    30,   // 30 seconds
+		ConnMaxLifetime: 300, // 5 minutes
+		ConnMaxIdleTime: 600, // 10 minutes
+		QueryTimeout:    30,  // 30 seconds
 	}
 }
 
@@ -156,9 +156,9 @@ func GetDefaultMongoDBConfig() *ports.MongoDBConfig {
 		Database:           "eir",
 		MaxPoolSize:        100,
 		MinPoolSize:        10,
-		MaxConnIdleTime:    600,  // 10 minutes
-		ServerTimeout:      30,   // 30 seconds
-		SocketTimeout:      30,   // 30 seconds
+		MaxConnIdleTime:    600, // 10 minutes
+		ServerTimeout:      30,  // 30 seconds
+		SocketTimeout:      30,  // 30 seconds
 		ReplicaSet:         "",
 		ReadPreference:     "primary",
 		WriteConcern:       "majority",

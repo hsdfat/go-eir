@@ -1,6 +1,6 @@
 package http
 
-import "github.com/hsdfat8/eir/internal/domain/models"
+import "github.com/hsdfat/go-eir/internal/domain/models"
 
 // EirResponseData represents the response for equipment status query (5G N5g-eir API)
 type EirResponseData struct {
@@ -18,24 +18,24 @@ type ProblemDetails struct {
 
 // ProvisionRequest represents equipment provisioning request
 type ProvisionRequest struct {
-	IMEI             string                  `json:"imei" binding:"required"`
-	IMEISV           *string                 `json:"imeisv,omitempty"`
-	Status           models.EquipmentStatus  `json:"status" binding:"required"`
-	Reason           *string                 `json:"reason,omitempty"`
-	Metadata         *string                 `json:"metadata,omitempty"`
-	ManufacturerTAC  *string                 `json:"manufacturer_tac,omitempty"`
-	ManufacturerName *string                 `json:"manufacturer_name,omitempty"`
+	IMEI             string                 `json:"imei" binding:"required"`
+	IMEISV           *string                `json:"imeisv,omitempty"`
+	Status           models.EquipmentStatus `json:"status" binding:"required"`
+	Reason           *string                `json:"reason,omitempty"`
+	Metadata         *string                `json:"metadata,omitempty"`
+	ManufacturerTAC  *string                `json:"manufacturer_tac,omitempty"`
+	ManufacturerName *string                `json:"manufacturer_name,omitempty"`
 }
 
 // EquipmentResponse represents equipment information response
 type EquipmentResponse struct {
-	IMEI             string                  `json:"imei"`
-	IMEISV           *string                 `json:"imeisv,omitempty"`
-	Status           models.EquipmentStatus  `json:"status"`
-	Reason           *string                 `json:"reason,omitempty"`
-	LastUpdated      string                  `json:"last_updated"`
-	LastCheckTime    *string                 `json:"last_check_time,omitempty"`
-	CheckCount       int64                   `json:"check_count"`
-	ManufacturerTAC  *string                 `json:"manufacturer_tac,omitempty"`
-	ManufacturerName *string                 `json:"manufacturer_name,omitempty"`
+	IMEI             string                 `json:"imei"`
+	IMEISV           *string                `json:"imeisv,omitempty"`
+	Status           models.EquipmentStatus `json:"status"`
+	Reason           *string                `json:"reason,omitempty"`
+	LastUpdated      string                 `json:"last_updated"`
+	LastCheckTime    *string                `json:"last_check_time,omitempty"`
+	CheckCount       int64                  `json:"check_count"`
+	ManufacturerTAC  *string                `json:"manufacturer_tac,omitempty"`
+	ManufacturerName *string                `json:"manufacturer_name,omitempty"`
 }
