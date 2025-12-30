@@ -25,14 +25,34 @@ type Config struct {
 
 // NewDB creates a new PostgreSQL database connection
 func NewDB(cfg Config) (*sqlx.DB, error) {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database, cfg.SSLMode,
+	// Use URL format for DSN (better compatibility with YugabyteDB than key=value format)
+	passwordPart := ""
+	if cfg.Password != "" {
+		passwordPart = ":" + cfg.Password
+	}
+	dsn := fmt.Sprintf("postgres://%s%s@%s:%d/%s?sslmode=%s",
+		cfg.User,
+		passwordPart,
+		cfg.Host,
+		cfg.Port,
+		cfg.Database,
+		cfg.SSLMode,
 	)
 
 	db, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Verify we're connected to the correct database (important for YugabyteDB)
+	var actualDB string
+	if err := db.QueryRow("SELECT current_database()").Scan(&actualDB); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to verify database: %w", err)
+	}
+	if actualDB != cfg.Database {
+		db.Close()
+		return nil, fmt.Errorf("connected to wrong database: expected=%s, actual=%s", cfg.Database, actualDB)
 	}
 
 	// Configure connection pool

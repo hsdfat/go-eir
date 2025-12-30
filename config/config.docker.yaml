@@ -1,3 +1,6 @@
+# Docker configuration for EIR connecting to existing YugabyteDB
+# Use with docker-compose.system.yaml
+
 server:
   host: "0.0.0.0"
   port: 8085
@@ -6,10 +9,11 @@ server:
   idleTimeout: "120s"
 
 database:
-  host: "127.0.0.1"    # Use IPv4 explicitly (localhost resolves to IPv6 which YugabyteDB may not bind to)
-  port: 5433           # YugabyteDB YSQL port
-  user: "yugabyte"     # YugabyteDB default user
-  password: ""         # No password for default user
+  # Connect to YugabyteDB tserver in docker-compose.system.yaml
+  host: "yb-tserver"      # hostname from docker-compose
+  port: 5433              # YugabyteDB YSQL port
+  user: "yugabyte"        # default YugabyteDB user
+  password: "yugabyte"    # default password (or empty)
   database: "eir"
   sslMode: "disable"
   maxOpenConns: 25
@@ -20,8 +24,8 @@ database:
 diameter:
   host: "0.0.0.0"
   port: 3765
-  originHost: "eir.example.com"
-  originRealm: "example.com"
+  originHost: "eir.docker.local"
+  originRealm: "docker.local"
   productName: "Go-EIR"
   vendorID: 10415
   maxConnections: 1000
@@ -37,7 +41,7 @@ cache:
   enabled: false
   provider: "redis"
   redis:
-    host: "localhost"
+    host: "redis"
     port: 6379
     password: ""
     db: 0

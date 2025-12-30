@@ -26,6 +26,13 @@ func NewMigrator(db *sqlx.DB) *Migrator {
 func (m *Migrator) Migrate(ctx context.Context) error {
 	fmt.Println("Starting database migration...")
 
+	// Verify which database we're connected to
+	var currentDB string
+	if err := m.db.QueryRowContext(ctx, "SELECT current_database()").Scan(&currentDB); err != nil {
+		return fmt.Errorf("failed to get current database: %w", err)
+	}
+	fmt.Printf("Running migration on database: %s\n", currentDB)
+
 	// Create migration tracking table if it doesn't exist
 	if err := m.createMigrationTable(ctx); err != nil {
 		return fmt.Errorf("failed to create migration table: %w", err)

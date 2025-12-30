@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,7 +19,16 @@ func main() {
 		log.Fatalw("Failed to load configuration", "error", err)
 	}
 
-	imeiRepo, auditRepo := initializeRepositories(log)
+	// Initialize PostgreSQL database adapter with migration
+	dbAdapter, err := initializePostgresAdapter(cfg, log)
+	if err != nil {
+		log.Fatalw("Failed to initialize database", "error", err)
+	}
+	defer dbAdapter.Disconnect(context.Background())
+
+	// Get repositories from database adapter
+	imeiRepo := dbAdapter.GetIMEIRepository()
+	auditRepo := dbAdapter.GetAuditRepository()
 
 	eirService := service.NewEIRService(cfg, imeiRepo, auditRepo, nil)
 	log.Info("✓ EIR service initialized")

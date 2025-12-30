@@ -30,12 +30,16 @@ func NewPostgresAdapter(config *ports.PostgresConfig) *PostgresAdapter {
 
 // Connect establishes a connection to the PostgreSQL database
 func (a *PostgresAdapter) Connect(ctx context.Context) error {
-	dsn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+	// Use URL format for DSN (better compatibility with YugabyteDB than key=value format)
+	passwordPart := ""
+	if a.config.Password != "" {
+		passwordPart = ":" + a.config.Password
+	}
+	dsn := fmt.Sprintf("postgres://%s%s@%s:%d/%s?sslmode=%s",
+		a.config.User,
+		passwordPart,
 		a.config.Host,
 		a.config.Port,
-		a.config.User,
-		a.config.Password,
 		a.config.Database,
 		a.config.SSLMode,
 	)
@@ -43,6 +47,17 @@ func (a *PostgresAdapter) Connect(ctx context.Context) error {
 	db, err := sqlx.ConnectContext(ctx, "postgres", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
+	}
+
+	// Verify we're connected to the correct database (important for YugabyteDB)
+	var actualDB string
+	if err := db.QueryRowContext(ctx, "SELECT current_database()").Scan(&actualDB); err != nil {
+		db.Close()
+		return fmt.Errorf("failed to verify database: %w", err)
+	}
+	if actualDB != a.config.Database {
+		db.Close()
+		return fmt.Errorf("connected to wrong database: expected=%s, actual=%s", a.config.Database, actualDB)
 	}
 
 	// Configure connection pool

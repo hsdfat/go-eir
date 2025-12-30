@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"time"
 
 	govclient "github.com/chronnie/governance/client"
 	"github.com/chronnie/governance/models"
@@ -11,9 +13,11 @@ import (
 	"github.com/hsdfat/go-eir/internal/adapters/diameter"
 	httpAdapter "github.com/hsdfat/go-eir/internal/adapters/http"
 	"github.com/hsdfat/go-eir/internal/adapters/memory"
+	"github.com/hsdfat/go-eir/internal/adapters/postgres"
 	"github.com/hsdfat/go-eir/internal/config"
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/logger"
+	"github.com/jmoiron/sqlx"
 )
 
 // Application holds the application state
@@ -57,6 +61,116 @@ func initializeRepositories(log logger.Logger) (ports.IMEIRepository, ports.Audi
 	auditRepo := memory.NewInMemoryAuditRepository()
 	log.Info("✓ Repositories initialized")
 	return imeiRepo, auditRepo
+}
+
+// initializePostgresAdapter sets up PostgreSQL database adapter with migration
+func initializePostgresAdapter(cfg *config.Config, log logger.Logger) (ports.DatabaseAdapter, error) {
+	// Build PostgreSQL config for database connection
+	dbConfig := postgres.Config{
+		Host:            cfg.Database.Host,
+		Port:            cfg.Database.Port,
+		User:            cfg.Database.User,
+		Password:        cfg.Database.Password,
+		Database:        cfg.Database.Database,
+		SSLMode:         cfg.Database.SSLMode,
+		MaxOpenConns:    cfg.Database.MaxOpenConns,
+		MaxIdleConns:    cfg.Database.MaxIdleConns,
+		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
+		ConnMaxIdleTime: cfg.Database.ConnMaxIdleTime,
+	}
+
+	log.Infow("Connecting to PostgreSQL",
+		"host", dbConfig.Host,
+		"port", dbConfig.Port,
+		"database", dbConfig.Database,
+	)
+
+	// Create database connection first
+	db, err := postgres.NewDB(dbConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+	}
+
+	log.Info("✓ Connected to PostgreSQL")
+
+	// Run database migration before creating adapter
+	if err := runDatabaseMigration(db, log); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to run database migration: %w", err)
+	}
+
+	log.Info("✓ Database migration completed")
+
+	// Build PostgreSQL config for adapter
+	adapterConfig := &ports.PostgresConfig{
+		Host:            cfg.Database.Host,
+		Port:            cfg.Database.Port,
+		User:            cfg.Database.User,
+		Password:        cfg.Database.Password,
+		Database:        cfg.Database.Database,
+		SSLMode:         cfg.Database.SSLMode,
+		MaxOpenConns:    cfg.Database.MaxOpenConns,
+		MaxIdleConns:    cfg.Database.MaxIdleConns,
+		ConnMaxLifetime: int(cfg.Database.ConnMaxLifetime.Seconds()),
+		ConnMaxIdleTime: int(cfg.Database.ConnMaxIdleTime.Seconds()),
+	}
+
+	// Create PostgreSQL adapter (it will create its own connection)
+	adapter := postgres.NewPostgresAdapter(adapterConfig)
+
+	// Connect adapter
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := adapter.Connect(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to connect adapter: %w", err)
+	}
+
+	// Close the migration connection since adapter has its own
+	db.Close()
+
+	// Verify schema
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel2()
+
+	if err := adapter.HealthCheck(ctx2); err != nil {
+		log.Warnw("Health check failed", "error", err)
+	}
+
+	log.Info("✓ Database adapter initialized")
+
+	return adapter, nil
+}
+
+// runDatabaseMigration runs database migrations similar to governance
+func runDatabaseMigration(db *sqlx.DB, log logger.Logger) error {
+	// Create migrator with direct database connection
+	migrator := postgres.NewMigrator(db)
+
+	// Run migration
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	log.Info("Running database migration...")
+	if err := migrator.Migrate(ctx); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	// Verify schema
+	if err := migrator.VerifySchema(ctx); err != nil {
+		log.Warnw("Schema verification had warnings", "error", err)
+	}
+
+	// Create partitions for current and next year
+	currentYear := time.Now().Year()
+	for _, year := range []int{currentYear, currentYear + 1} {
+		if err := migrator.CreatePartitionsForYear(ctx, year); err != nil {
+			log.Warnw("Failed to create partitions", "year", year, "error", err)
+		}
+	}
+
+	return nil
 }
 
 // initializeHTTPServer configures and starts the HTTP/2 server
