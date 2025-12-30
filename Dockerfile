@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for production-grade EIR service
 
 # Stage 1: Build
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git make
@@ -41,7 +41,7 @@ WORKDIR /app
 COPY --from=builder /build/eir /app/eir
 
 # Copy config template (optional)
-COPY --from=builder /build/config/config.yaml.template /app/config/config.yaml.template
+COPY --from=builder /build/config/config.default.yaml /app/config/config.default.yaml
 
 # Change ownership
 RUN chown -R eir:eir /app
