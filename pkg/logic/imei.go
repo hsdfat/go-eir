@@ -80,6 +80,19 @@ func CheckImei(imei string, status models.SystemStatus) models.CheckResult {
 
 func validateAddImei(imei string, color string) error {
 	logger.Log.Debugw("validateAddImei started", "imei", imei, "color", color)
+	err := validateImei(imei)
+	if err != nil {
+		return err
+	}
+	err = validateColor(color)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateImei(imei string) error {
+	logger.Log.Debugw("validateAddImei started", "imei", imei)
 
 	if imei == "" {
 		logger.Log.Warnw("validateAddImei invalid parameter", "imei", imei)
@@ -96,13 +109,18 @@ func validateAddImei(imei string, color string) error {
 		logger.Log.Warnw("validateAddImei invalid length", "imei", imei, "length", len(imei), "max_length", imeiMaxLength)
 		return errors.New("invalid_length")
 	}
+	return nil
+}
+
+func validateColor(color string) error {
+	logger.Log.Debugw("validateColor started", "color", color)
 	switch color {
 	case "b", "g", "w":
 	default:
-		logger.Log.Warnw("validateAddImei invalid color", "imei", imei, "color", color)
+		logger.Log.Warnw("validateAddImei invalid color", "color", color)
 		return errors.New("invalid_color")
 	}
-	logger.Log.Debugw("validateAddImei passed", "imei", imei, "color", color)
+	logger.Log.Debugw("validateAddImei passed", "color", color)
 	return nil
 }
 
@@ -209,6 +227,153 @@ func InsertImei(repo ports.IMEIRepository, imei string, color string, status mod
 	}
 	logger.Log.Infow("InsertImei logic completed successfully (new)", "imei", imei, "start", start)
 	return models.InsertImeiResult{
+		Status: "ok",
+		IMEI:   imei,
+	}
+}
+
+func updateImei(repo ports.IMEIRepository, imei string, color string, status models.SystemStatus) models.UpdateImeiResult {
+	logger.Log.Infow("UpdateImei logic started", "imei", imei, "color", color)
+	if utils.IsOverLoad(status) {
+		logger.Log.Warnw("InsertImei system overloaded", "imei", imei, "overload_level", status.OverloadLevel)
+		return models.UpdateImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  "overload",
+		}
+	}
+
+	if err := validateAddImei(imei, color); err != nil {
+		logger.Log.Warnw("InsertImei validation failed", "imei", imei, "color", color, "error", err)
+		return models.UpdateImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  err.Error(),
+		}
+	}
+	start, end := normalizeImeiForInsert(imei)
+	logger.Log.Debugw("InsertImei normalized", "imei", imei, "start", start, "end", end)
+	ctx := context.Background()
+
+	if info, ok := repo.LookupImeiInfo(ctx, start); ok {
+		logger.Log.Debugw("UpdateImei found existing start IMEI", "imei", imei, "start", start)
+
+		if info.Color != color {
+			logger.Log.Warnw("InsertImei color conflict", "imei", imei, "requested_color", color, "existing_color", info.Color)
+			return models.UpdateImeiResult{
+				Status: "error",
+				IMEI:   imei,
+				Error:  "color_conflict",
+			}
+		}
+
+		for _, e := range info.EndIMEI {
+			if e == end {
+				logger.Log.Warnw("InsertImei IMEI already exists", "imei", imei, "start", start, "end", end)
+				return models.UpdateImeiResult{
+					Status: "error",
+					IMEI:   imei,
+					Error:  "imei_exist",
+				}
+			}
+		}
+
+		if len(info.EndIMEI) == 1 && info.EndIMEI[0] == " " {
+			info.EndIMEI = []string{end}
+		} else {
+			info.EndIMEI = append(info.EndIMEI, end)
+		}
+
+		logger.Log.Debugw("InsertImei updating existing entry", "imei", imei, "start", start, "end", end)
+		err := repo.SaveImeiInfo(ctx, info)
+		if err != nil {
+			logger.Log.Infow("InsertImei logic completed failed: ", "imei", imei, "start", start, "error", err.Error())
+			return models.UpdateImeiResult{
+				Status: "error",
+				IMEI:   imei,
+			}
+		}
+		logger.Log.Infow("InsertImei logic completed successfully (updated)", "imei", imei, "start", start)
+		return models.UpdateImeiResult{
+			Status: "ok",
+			IMEI:   imei,
+		}
+	}
+	return models.UpdateImeiResult{
+		Status: "ok",
+		IMEI:   imei,
+	}
+
+}
+func deleteImei(repo ports.IMEIRepository, imei string, status models.SystemStatus) models.DeleteImeiResult {
+
+	logger.Log.Infow("DeleteImei started", "imei", imei)
+
+	// Check overload
+	if utils.IsOverLoad(status) {
+		logger.Log.Warnw("DeleteImei system overloaded", "imei", imei, "overload_level", status.OverloadLevel)
+		return models.DeleteImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  "overload",
+		}
+	}
+
+	// Validate IMEI
+	if err := validateImei(imei); err != nil {
+		logger.Log.Warnw("DeleteImei validation failed", "imei", imei, "error", err)
+		return models.DeleteImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  err.Error(),
+		}
+	}
+
+	start, end := normalizeImeiForInsert(imei)
+	logger.Log.Debugw("DeleteImei normalized", "imei", imei, "start", start, "end", end)
+
+	ctx := context.Background()
+
+	info, ok := repo.LookupImeiInfo(ctx, start)
+	if !ok {
+		logger.Log.Warnw("DeleteImei start IMEI not found", "imei", imei, "start", start)
+		return models.DeleteImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  "imei_not_exist",
+		}
+	}
+
+	found := false
+	for i, e := range info.EndIMEI {
+		if e == end {
+			info.EndIMEI = append(info.EndIMEI[:i], info.EndIMEI[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		logger.Log.Warnw("DeleteImei end IMEI not found", "imei", imei, "end", end)
+		return models.DeleteImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  "imei_not_exist",
+		}
+
+	}
+
+	if err := repo.SaveImeiInfo(ctx, info); err != nil {
+		logger.Log.Errorw("DeleteImei save failed", "imei", imei, "error", err)
+		return models.DeleteImeiResult{
+			Status: "error",
+			IMEI:   imei,
+			Error:  "save_failed",
+		}
+	}
+
+	logger.Log.Infow("DeleteImei success", "imei", imei)
+	return models.DeleteImeiResult{
 		Status: "ok",
 		IMEI:   imei,
 	}

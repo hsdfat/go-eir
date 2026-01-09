@@ -35,8 +35,19 @@ type mockEIRService struct {
 // newMockEIRService creates a properly initialized mock service
 func newMockEIRService() (*mockEIRService, func()) {
 	_ = godotenv.Load("../../../.env")
+	os.Setenv(
+		"DATABASE_URL",
+		//"host=localhost port=5432 user=eir password=eir dbname=eir sslmode=disable",
+		"host=localhost port=5433 user=eir password=eir_password dbname=eir sslmode=disable",
+	)
+
 	dbURL := os.Getenv("DATABASE_URL")
-	db, _ := sqlx.Connect("postgres", dbURL)
+	fmt.Println("dbURL: ", dbURL)
+	//db, _ := sqlx.Connect("postgres", dbURL)	//TODO: need handle if connect db error
+	db, err := sqlx.Connect("postgres", dbURL)
+	if err != nil {
+		fmt.Println("===========err: ", err)
+	}
 	cleanup := func() {
 		db.Close()
 	}
@@ -590,7 +601,9 @@ func TestServerGracefulShutdown(t *testing.T) {
 	t.Log("Graceful shutdown test passed")
 }
 
+// TODO
 func TestCheckImeiWithPCAP(t *testing.T) {
+	fmt.Println("TestCheckImeiWithPCAP() func")
 	pcapFile := "http2_check_imei_8080_test.pcap"
 	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
 	if err != nil {
@@ -604,6 +617,7 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 	}
 
 	mockService, cleanup := newMockEIRService()
+	fmt.Println("after newMockEIRService() func")
 	defer cleanup()
 	log := logger.New("eir", "info")
 	server := NewServer(config, mockService, log)
@@ -611,8 +625,9 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
 	}
+	fmt.Println("after server.Start() func")
 	defer server.Stop()
-
+	fmt.Println("after server.Stop() func")
 	time.Sleep(100 * time.Millisecond)
 
 	addr := "127.0.0.1:8080"
@@ -638,7 +653,9 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 	// EIR_10: Insert blacklisted IMEI then check it
 	t.Run("InsertAndCheck_Blacklisted_EIR_10", func(t *testing.T) {
 		// Clear database before test
-		mockService.ClearImeiInfo()
+		fmt.Println("before ClearImeiInfo func")
+		//mockService.ClearImeiInfo()
+		fmt.Println("after ClearImeiInfo func")
 
 		imei := "9"
 		color := "b"
@@ -2094,4 +2111,104 @@ func TestInsertImeiWithPCAP(t *testing.T) {
 	t.Logf("PCAP file saved: %s", pcapFile)
 	t.Log("Open in Wireshark with filter: http2 or tcp.port == 8080")
 	t.Logf("==================================")
+}
+
+// TODO
+func TestCheckImeiWithPCAPv2(t *testing.T) {
+	pcapFile := "http2_check_imei_8080_test.pcap"
+	pcapWriter, err := testutil.NewPCAPWriter(pcapFile)
+	if err != nil {
+		t.Fatalf("Failed to create PCAP writer: %v", err)
+	}
+	defer pcapWriter.Close()
+
+	config := ServerConfig{
+		ListenAddr: "127.0.0.1:8080",
+		EnableH2C:  true,
+	}
+
+	mockService, cleanup := newMockEIRService()
+	defer cleanup()
+	log := logger.New("eir", "info")
+	server := NewServer(config, mockService, log)
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("Failed to start server: %v", err)
+	}
+	defer server.Stop()
+	time.Sleep(100 * time.Millisecond)
+
+	addr := "127.0.0.1:8080"
+	t.Logf("Server started on %s for CheckImei testing", addr)
+
+	// dialer := &net.Dialer{}
+	// transport := &http.Transport{
+	// 	DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+	// 		conn, err := dialer.DialContext(ctx, network, addr)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		// Wrap connection with PCAP capture
+	// 		return testutil.NewCaptureConnection(conn, pcapWriter), nil
+	// 	},
+	// }
+
+	// client := &http.Client{
+	// 	Transport: transport,
+	// 	Timeout:   5 * time.Second,
+	// }
+
+	// EIR_10: Insert blacklisted IMEI then check it
+	// t.Run("InsertAndCheck_Blacklisted_EIR_10", func(t *testing.T) {
+	// 	// Clear database before test
+	// 	mockService.ClearImeiInfo()
+
+	// 	imei := "9"
+	// 	color := "b"
+
+	// 	// Step 1: Insert IMEI with black color
+	// 	insertReq := ports.ImeiInfoInsert{
+	// 		Imei:  imei,
+	// 		Color: color,
+	// 	}
+	// 	body, _ := json.Marshal(insertReq)
+	// 	insertURL := fmt.Sprintf("http://%s/api/v1/insert-imei", addr)
+
+	// 	resp, err := client.Post(insertURL, "application/json", bytes.NewReader(body))
+	// 	if err != nil {
+	// 		t.Fatalf("Insert IMEI request failed: %v", err)
+	// 	}
+	// 	resp.Body.Close()
+
+	// 	if resp.StatusCode != http.StatusCreated {
+	// 		t.Fatalf("Insert IMEI failed with status %d", resp.StatusCode)
+	// 	}
+	// 	t.Logf("✓ Inserted IMEI: %s with color: %s", imei, color)
+
+	// 	// Step 2: Check IMEI
+	// 	checkURL := fmt.Sprintf("http://%s/api/v1/check-imei/%s", addr, imei)
+	// 	resp, err = client.Get(checkURL)
+	// 	if err != nil {
+	// 		t.Fatalf("CheckImei request failed: %v", err)
+	// 	}
+	// 	defer resp.Body.Close()
+
+	// 	if resp.StatusCode != http.StatusOK {
+	// 		body, _ := io.ReadAll(resp.Body)
+	// 		t.Fatalf("Expected status 200, got %d: %s", resp.StatusCode, string(body))
+	// 	}
+
+	// 	var result EirResponseData
+	// 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	// 		t.Fatalf("Failed to decode response: %v", err)
+	// 	}
+
+	// 	if result.Status != models.EquipmentStatusBlacklisted {
+	// 		t.Errorf("Expected status %s, got %s", models.EquipmentStatusBlacklisted, result.Status)
+	// 	}
+
+	// 	t.Logf("✓ Check IMEI passed: IMEI=%s, Status=%s", imei, result.Status)
+	// })
+
+	t.Logf("PCAP file saved: %s (contains all CheckImei test traffic)", pcapFile)
 }

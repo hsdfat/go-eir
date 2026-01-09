@@ -18,8 +18,31 @@ type InsertImeiResult struct {
 	IMEI   string
 	Error  string
 }
+type UpdateImeiResult struct {
+	Status string
+	IMEI   string
+	Error  string
+}
+
+type DeleteImeiResult struct {
+	Status string
+	IMEI   string
+	Error  string
+}
 
 type InsertTacResult struct {
+	Status  string
+	TacInfo TacInfo
+	Error   string
+}
+
+type UpdateTacResult struct {
+	Status  string
+	TacInfo TacInfo
+	Error   string
+}
+
+type DeleteTacResult struct {
 	Status  string
 	TacInfo TacInfo
 	Error   string
