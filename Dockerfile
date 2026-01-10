@@ -1,53 +1,40 @@
 # Multi-stage Dockerfile for production-grade EIR service
 
 # Stage 1: Build
-FROM golang:1.25-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git make
-
+FROM hsdfat/ubi8-go:1.25.2 AS builder
+ENV WORKDIR=/app
 # Set working directory
-WORKDIR /build
+WORKDIR ${WORKDIR}
 
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download
-
-# Copy source code
-COPY . .
-
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
-    -o /build/eir \
-    ./cmd/eir
+RUN \
+    --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    --mount=type=bind,target=$WORKDIR \
+    go build -o /tmp/main ./cmd/eir
 
 # Stage 2: Runtime
-FROM alpine:3.18
+FROM redhat/ubi8:latest
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
-
-# Create non-root user
-RUN addgroup -g 1000 eir && \
-    adduser -D -u 1000 -G eir eir
+ENV WORKDIR=/app \
+    USERNAME=eir \
+    GROUPNAME=eir \
+    USERID=2026 \
+    GROUPID=2026 
+#LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/lib64
 
 # Set working directory
-WORKDIR /app
+WORKDIR ${WORKDIR}
 
 # Copy binary from builder
-COPY --from=builder /build/eir /app/eir
-
-# Copy config template (optional)
-COPY --from=builder /build/config/config.default.yaml /app/config/config.default.yaml
+COPY --from=builder /tmp/main /app/main
 
 # Change ownership
-RUN chown -R eir:eir /app
+RUN groupadd --gid ${GROUPID} ${GROUPNAME} && \
+    useradd --uid ${USERID} --gid ${GROUPID} -m ${USERNAME} && \
+    chown -R ${USERNAME}:${GROUPNAME} /app
 
 # Switch to non-root user
-USER eir
+USER ${USERNAME}
 
 # Expose ports
 EXPOSE 8080 3868 9090
@@ -57,4 +44,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Run the application
-ENTRYPOINT ["/app/eir"]
+ENTRYPOINT ["/app/main"]

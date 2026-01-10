@@ -92,9 +92,10 @@ type MetricsConfig struct {
 
 // GovernanceConfig holds governance/service discovery configuration
 type GovernanceConfig struct {
-	Enabled     bool   // Enable/disable governance registration
-	URL         string // Governance manager URL
-	FailOnError bool   // Panic if registration fails when enabled
+	Enabled        bool   // Enable/disable governance registration
+	URL            string // Governance manager URL
+	FailOnError    bool   // Panic if registration fails when enabled
+	GovBackendPort int    // Port for governance health check and notification endpoints (default 2345)
 }
 
 // Load loads configuration from file and environment variables
@@ -172,6 +173,7 @@ func Load(configPath string) (*Config, error) {
 	// Override governance config with values from environment
 	config.Governance.Enabled = envConfig.Governance
 	config.Governance.FailOnError = envConfig.GovFail
+	config.Governance.GovBackendPort = envConfig.GovBackendPort
 
 	// Convert TargetGov (host:port) to full URL format
 	if envConfig.TargetGov != "" {

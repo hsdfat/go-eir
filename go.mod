@@ -1,6 +1,6 @@
 module github.com/hsdfat/go-eir
 
-go 1.25.5
+go 1.25.2
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -9,7 +9,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85
 	github.com/hsdfat/go-zlog v0.0.3
-	github.com/hsdfat/telco v0.0.4
+	github.com/hsdfat/telco v0.0.5-0.20260110064706-87be845ac618
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
@@ -94,4 +94,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/chronnie/governance => github.com/hsdfat/governance v0.0.0-20251229121118-3c3096eb305b
+replace github.com/chronnie/governance => github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a

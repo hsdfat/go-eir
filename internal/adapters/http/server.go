@@ -31,16 +31,22 @@ type ServerConfig struct {
 
 // Server represents the HTTP/2 server
 type Server struct {
-	config     ServerConfig
-	httpServer *http.Server
-	listener   net.Listener
-	eirService ports.EIRService
-	router     *gin.Engine
-	logger     logger.Logger
+	config         ServerConfig
+	httpServer     *http.Server
+	listener       net.Listener
+	eirService     ports.EIRService
+	router         *gin.Engine
+	logger         logger.Logger
+	statsCollector StatsCollector
+}
+
+// StatsCollector interface for collecting statistics
+type StatsCollector interface {
+	GetStats() interface{}
 }
 
 // NewServer creates a new HTTP/2 server instance
-func NewServer(config ServerConfig, eirService ports.EIRService, log logger.Logger) *Server {
+func NewServer(config ServerConfig, eirService ports.EIRService, statsCollector StatsCollector, log logger.Logger) *Server {
 	// Set defaults
 	if config.ReadTimeout == 0 {
 		config.ReadTimeout = 30 * time.Second
@@ -58,13 +64,14 @@ func NewServer(config ServerConfig, eirService ports.EIRService, log logger.Logg
 		config.ShutdownTimeout = 10 * time.Second
 	}
 
-	router := SetupRouter(eirService, log)
+	router := SetupRouter(eirService, statsCollector, log)
 
 	return &Server{
-		config:     config,
-		eirService: eirService,
-		router:     router,
-		logger:     log,
+		config:         config,
+		eirService:     eirService,
+		router:         router,
+		logger:         log,
+		statsCollector: statsCollector,
 	}
 }
 
