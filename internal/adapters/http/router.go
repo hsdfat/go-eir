@@ -59,6 +59,28 @@ func ginLogger(logger logger.Logger) gin.HandlerFunc {
 	}
 }
 
+// statsMiddleware returns a gin.HandlerFunc (middleware) that tracks HTTP request statistics
+func statsMiddleware(statsCollector StatsCollector) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Process request
+		c.Next()
+
+		// Only track API endpoints, not health/stats endpoints
+		path := c.Request.URL.Path
+		if path == "/health" || path == "/api/stats" {
+			return
+		}
+
+		// Record stats after request completes
+		if statsCollector != nil {
+			statusCode := c.Writer.Status()
+			success := statusCode >= 200 && statusCode < 400
+			statsCollector.RecordRequest("http", success)
+			statsCollector.RecordResultCode("http", statusCode)
+		}
+	}
+}
+
 // ginRecovery returns a gin.HandlerFunc (middleware) that recovers from panics and logs using our observability logger
 func ginRecovery(logger logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -111,7 +133,10 @@ func SetupRouter(eirService ports.EIRService, statsCollector StatsCollector, log
 	// Add custom logger middleware
 	router.Use(ginLogger(httpLogger))
 
-	handler := NewHandler(eirService, log)
+	// Add stats tracking middleware
+	router.Use(statsMiddleware(statsCollector))
+
+	handler := NewHandler(eirService, statsCollector, log)
 
 	// 5G N5g-eir API (3GPP TS 29.511)
 	v1 := router.Group("/n5g-eir-eic/v1")

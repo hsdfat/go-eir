@@ -13,15 +13,17 @@ import (
 
 // Handler handles HTTP requests for the EIR service
 type Handler struct {
-	eirService ports.EIRService
-	logger     logger.Logger
+	eirService     ports.EIRService
+	logger         logger.Logger
+	statsCollector StatsCollector
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(eirService ports.EIRService, log logger.Logger) *Handler {
+func NewHandler(eirService ports.EIRService, statsCollector StatsCollector, log logger.Logger) *Handler {
 	return &Handler{
-		eirService: eirService,
-		logger:     log,
+		eirService:     eirService,
+		statsCollector: statsCollector,
+		logger:         log,
 	}
 }
 
@@ -83,6 +85,7 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 	equipmentStatus := convertColorToEquipmentStatus(response.Color)
 
 	h.logger.Infow("HTTP GetEquipmentStatus response", "pei", pei, "status", equipmentStatus, "color", response.Color)
+
 	// Return response
 	c.JSON(http.StatusOK, EirResponseData{
 		Status: equipmentStatus,

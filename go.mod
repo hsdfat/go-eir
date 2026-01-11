@@ -9,7 +9,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85
 	github.com/hsdfat/go-zlog v0.0.3
-	github.com/hsdfat/telco v0.0.5-0.20260110064706-87be845ac618
+	github.com/hsdfat/telco v0.0.5-0.20260111125949-e177502c9f6c
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
@@ -91,6 +91,7 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

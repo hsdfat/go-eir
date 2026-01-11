@@ -70,6 +70,7 @@ type ServerConfig struct {
 // StatsCollector interface for collecting statistics
 type StatsCollector interface {
 	RecordRequest(source string, success bool)
+	RecordResultCode(source string, code int)
 	IncrementActiveConnections()
 	DecrementActiveConnections()
 }
@@ -205,6 +206,12 @@ func (s *Server) handleMEIdentityCheck(msg *connection.Message, conn connection.
 		return
 	}
 
+	// Extract result code value
+	resultCodeValue := uint32(0)
+	if answer.ResultCode != nil {
+		resultCodeValue = uint32(*answer.ResultCode)
+	}
+
 	// Send response
 	resultLabel := "success"
 	success := true
@@ -217,11 +224,19 @@ func (s *Server) handleMEIdentityCheck(msg *connection.Message, conn connection.
 		s.logger.Infow("Sent ME-Identity-Check-Answer",
 			"imei", string(*req.TerminalInformation.Imei),
 			"result", answer.ResultCode)
+
+		// Determine success based on Diameter result code
+		// 2001 = DIAMETER_SUCCESS, anything else is considered a failure
+		if resultCodeValue != 2001 {
+			success = false
+		}
 	}
 
 	// Record unified stats
 	if s.statsCollector != nil {
 		s.statsCollector.RecordRequest("diameter", success)
+		// Record result code for tracking
+		s.statsCollector.RecordResultCode("diameter", int(resultCodeValue))
 	}
 
 	// Record Prometheus metrics

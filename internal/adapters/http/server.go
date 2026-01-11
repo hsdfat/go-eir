@@ -42,6 +42,8 @@ type Server struct {
 
 // StatsCollector interface for collecting statistics
 type StatsCollector interface {
+	RecordRequest(source string, success bool)
+	RecordResultCode(source string, code int)
 	GetStats() interface{}
 }
 

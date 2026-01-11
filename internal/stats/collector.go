@@ -40,9 +40,10 @@ type StatsCollector struct {
 	blacklistedCount atomic.Uint64
 	greylistedCount  atomic.Uint64
 
-	// Result code counters
-	mu              sync.RWMutex
-	resultCodeCount map[int]uint64
+	// Result code counters per interface
+	mu                     sync.RWMutex
+	diameterResultCodes    map[int]uint64
+	httpResultCodes        map[int]uint64
 
 	// Active connections
 	activeConnections atomic.Int64
@@ -51,8 +52,9 @@ type StatsCollector struct {
 // NewStatsCollector creates a new stats collector
 func NewStatsCollector() *StatsCollector {
 	return &StatsCollector{
-		startTime:       time.Now(),
-		resultCodeCount: make(map[int]uint64),
+		startTime:           time.Now(),
+		diameterResultCodes: make(map[int]uint64),
+		httpResultCodes:     make(map[int]uint64),
 	}
 }
 
@@ -84,11 +86,17 @@ func (c *StatsCollector) RecordRequest(source string, success bool) {
 	}
 }
 
-// RecordResultCode records a result code for equipment checks
-func (c *StatsCollector) RecordResultCode(code int) {
+// RecordResultCode records a result code for equipment checks from a specific interface
+func (c *StatsCollector) RecordResultCode(source string, code int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.resultCodeCount[code]++
+
+	switch source {
+	case "diameter":
+		c.diameterResultCodes[code]++
+	case "http":
+		c.httpResultCodes[code]++
+	}
 }
 
 // RecordCacheHit records a cache operation
@@ -177,10 +185,15 @@ func (c *StatsCollector) GetStatsData() *unifiedStats.ServiceStats {
 		tps = float64(total) / uptime.Seconds()
 	}
 
-	// Copy result code map
-	resultCodes := make(map[int]uint64)
-	for code, count := range c.resultCodeCount {
-		resultCodes[code] = count
+	// Copy result code maps per interface
+	diameterResultCodes := make(map[int]uint64)
+	for code, count := range c.diameterResultCodes {
+		diameterResultCodes[code] = count
+	}
+
+	httpResultCodes := make(map[int]uint64)
+	for code, count := range c.httpResultCodes {
+		httpResultCodes[code] = count
 	}
 
 	stats := &unifiedStats.ServiceStats{
@@ -219,12 +232,23 @@ func (c *StatsCollector) GetStatsData() *unifiedStats.ServiceStats {
 		CustomMetrics: map[string]interface{}{
 			"eir": &unifiedStats.EIRStats{
 				EquipmentChecks: unifiedStats.EquipmentCheckStats{
-					Total: total,
-					ByInterface: map[string]uint64{
-						"diameter": diamReq,
-						"http":     httpReq,
+					Total:   total,
+					Success: success,
+					Failed:  failed,
+					ByInterface: map[string]unifiedStats.InterfaceCheckStats{
+						"diameter": {
+							Total:        diamReq,
+							Success:      diamSuccess,
+							Failed:       diamFailed,
+							ByResultCode: diameterResultCodes,
+						},
+						"http": {
+							Total:        httpReq,
+							Success:      httpSuccess,
+							Failed:       httpFailed,
+							ByResultCode: httpResultCodes,
+						},
 					},
-					ByResultCode: resultCodes,
 				},
 				CacheStats: unifiedStats.CacheStats{
 					Hits:    hits,
@@ -273,6 +297,7 @@ func (c *StatsCollector) Reset() {
 	c.activeConnections.Store(0)
 
 	c.mu.Lock()
-	c.resultCodeCount = make(map[int]uint64)
+	c.diameterResultCodes = make(map[int]uint64)
+	c.httpResultCodes = make(map[int]uint64)
 	c.mu.Unlock()
 }

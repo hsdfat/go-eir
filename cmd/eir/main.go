@@ -43,13 +43,18 @@ func main() {
 	// Register with governance (must be done after HTTP server is initialized)
 	govClient := registerWithGovernance(cfg, log, httpServer)
 
+	// Initialize metrics export scheduler
+	viperConfig := loadViperConfig("")
+	exportScheduler := initializeExportScheduler(viperConfig, statsCollector, log)
+
 	app := &Application{
-		cfg:            cfg,
-		logger:         log,
-		httpServer:     httpServer,
-		diameterServer: diameterServer,
-		govClient:      govClient,
-		statsCollector: statsCollector,
+		cfg:             cfg,
+		logger:          log,
+		httpServer:      httpServer,
+		diameterServer:  diameterServer,
+		govClient:       govClient,
+		statsCollector:  statsCollector,
+		exportScheduler: exportScheduler,
 	}
 
 	quit := make(chan os.Signal, 1)

@@ -17,17 +17,20 @@ import (
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/logger"
 	"github.com/hsdfat/go-eir/internal/stats"
+	"github.com/hsdfat/telco/stats/export"
 	"github.com/jmoiron/sqlx"
+	"github.com/spf13/viper"
 )
 
 // Application holds the application state
 type Application struct {
-	cfg            *config.Config
-	logger         logger.Logger
-	httpServer     *httpAdapter.Server
-	diameterServer *diameter.Server
-	govClient      *govclient.Client
-	statsCollector *stats.StatsCollector
+	cfg             *config.Config
+	logger          logger.Logger
+	httpServer      *httpAdapter.Server
+	diameterServer  *diameter.Server
+	govClient       *govclient.Client
+	statsCollector  *stats.StatsCollector
+	exportScheduler *export.ExportScheduler
 }
 
 // getLocalIP returns the non-loopback local IP of the host
@@ -325,9 +328,100 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger, httpServer *h
 	return govClient
 }
 
+// loadViperConfig loads viper configuration for export scheduler
+func loadViperConfig(configPath string) *viper.Viper {
+	v := viper.New()
+
+	if configPath != "" {
+		v.SetConfigFile(configPath)
+	} else {
+		v.SetConfigName("config")
+		v.SetConfigType("yaml")
+		v.AddConfigPath(".")
+		v.AddConfigPath("./config")
+		v.AddConfigPath("/etc/eir")
+	}
+
+	v.AutomaticEnv()
+	v.SetEnvPrefix("EIR")
+
+	// Try to read config file
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			v.SetConfigName("config.default")
+			_ = v.ReadInConfig()
+		}
+	}
+
+	return v
+}
+
+// initializeExportScheduler creates and starts the metrics export scheduler
+func initializeExportScheduler(v *viper.Viper, statsCollector *stats.StatsCollector, log logger.Logger) *export.ExportScheduler {
+	// Load export configuration
+	exportConfig, err := export.LoadExportConfig(v)
+	if err != nil {
+		log.Errorw("Failed to load export configuration", "error", err)
+		return nil
+	}
+
+	if !exportConfig.Enabled {
+		log.Info("Metrics export is disabled")
+		return nil
+	}
+
+	// Create transformer
+	transformer := export.NewTransformer(exportConfig.Hostname, exportConfig.SystemName)
+
+	// Create scheduler
+	scheduler := export.NewExportScheduler(
+		exportConfig.Interval,
+		statsCollector,
+		transformer,
+		log,
+	)
+
+	// Register exporters
+	for _, expCfg := range exportConfig.Exporters {
+		if !expCfg.Enabled {
+			continue
+		}
+
+		exporter, err := export.CreateExporter(expCfg, log)
+		if err != nil {
+			log.Errorw("Failed to create exporter",
+				"name", expCfg.Name,
+				"type", expCfg.Type,
+				"error", err)
+			continue
+		}
+
+		scheduler.AddExporter(exporter)
+		log.Infow("Registered metrics exporter",
+			"name", expCfg.Name,
+			"type", expCfg.Type)
+	}
+
+	// Start scheduler
+	ctx := context.Background()
+	scheduler.Start(ctx)
+
+	log.Infow("✓ Metrics export scheduler started",
+		"interval", exportConfig.Interval.String(),
+		"exporters", len(exportConfig.Exporters))
+
+	return scheduler
+}
+
 // shutdown performs graceful shutdown of all services
 func (app *Application) shutdown() {
 	app.logger.Info("Shutting down servers...")
+
+	// Stop export scheduler first
+	if app.exportScheduler != nil {
+		app.exportScheduler.Stop()
+		app.logger.Info("✓ Stopped metrics export scheduler")
+	}
 
 	if app.govClient != nil {
 		app.govClient.StopHeartbeat()

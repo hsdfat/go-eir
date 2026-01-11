@@ -35,6 +35,14 @@ type mockEIRService struct {
 // mockStatsCollector is a mock implementation of StatsCollector for testing
 type mockStatsCollector struct{}
 
+func (m *mockStatsCollector) RecordRequest(source string, success bool) {
+	// Mock implementation - no-op for testing
+}
+
+func (m *mockStatsCollector) RecordResultCode(source string, code int) {
+	// Mock implementation - no-op for testing
+}
+
 func (m *mockStatsCollector) GetStats() interface{} {
 	return nil
 }
