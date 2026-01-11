@@ -137,6 +137,10 @@ github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a h1:BPgcCdT5IgrAb
 github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a/go.mod h1:K6uqNVCW8pQmaKZm9mq5Mgnxhv69bfSpQxnO0qYNf74=
 github.com/hsdfat/telco v0.0.5-0.20260111125949-e177502c9f6c h1:jJRKNzjCGOdtoH0SlYegK7njM6D3g54ZGCIrOlV38hU=
 github.com/hsdfat/telco v0.0.5-0.20260111125949-e177502c9f6c/go.mod h1:PShX3LPdq52aKjcLedh4YNcNDuAGclpcw+NKgzzVQi0=
+github.com/hsdfat/telco v0.0.5-0.20260111151713-ee8cce507a72 h1:Qpm4r/iDv+xSMkf4GkO3tmV66u7trAgjcDb0NQwfz2s=
+github.com/hsdfat/telco v0.0.5-0.20260111151713-ee8cce507a72/go.mod h1:PShX3LPdq52aKjcLedh4YNcNDuAGclpcw+NKgzzVQi0=
+github.com/hsdfat/telco v0.0.5-0.20260111153810-95524a597306 h1:9/pIKX9bjJ3VSvZ6D0a403E0hlk48xGvHdpKjrK86u0=
+github.com/hsdfat/telco v0.0.5-0.20260111153810-95524a597306/go.mod h1:PShX3LPdq52aKjcLedh4YNcNDuAGclpcw+NKgzzVQi0=
 github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
 github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
 github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
