@@ -19,6 +19,18 @@ func main() {
 		log.Fatalw("Failed to load configuration", "error", err)
 	}
 
+	// Initialize centralized logging if enabled
+	if err := logger.InitializeWithConfig(cfg); err != nil {
+		log.Warnw("Failed to initialize centralized logging, using console only", "error", err)
+	} else if cfg.Logging.Centralized.Enabled {
+		log.Infow("Centralized logging initialized",
+			"backend", cfg.Logging.Centralized.Backend,
+			"url", cfg.Logging.Centralized.LokiURL)
+	}
+
+	// Recreate logger after initialization
+	log = logger.New("eir", cfg.Logging.Level)
+
 	// Initialize PostgreSQL database adapter with migration
 	dbAdapter, err := initializePostgresAdapter(cfg, log)
 	if err != nil {

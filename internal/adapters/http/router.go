@@ -165,6 +165,9 @@ func SetupRouter(eirService ports.EIRService, statsCollector StatsCollector, log
 	// Health check
 	router.GET("/health", handler.HealthCheck)
 
+	// Build info
+	router.GET("/build-info", handler.GetBuildInfo)
+
 	return router
 }
 

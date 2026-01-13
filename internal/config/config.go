@@ -81,6 +81,24 @@ type LoggingConfig struct {
 	Level      string // "debug", "info", "warn", "error"
 	Format     string // "json", "text"
 	OutputPath string // "stdout", "stderr", or file path
+	// Centralized logging configuration
+	Centralized CentralizedLoggingConfig
+}
+
+// CentralizedLoggingConfig holds configuration for centralized logging
+type CentralizedLoggingConfig struct {
+	Enabled     bool   // Enable centralized logging
+	Backend     string // "loki", "http", "none"
+	LokiURL     string // Loki push API URL (e.g., http://loki:3100/loki/api/v1/push)
+	HTTPURL     string // Generic HTTP endpoint URL
+	TenantID    string // Optional tenant ID for multi-tenancy (Loki)
+	BearerToken string // Optional bearer token for authentication
+	// Buffering configuration
+	BufferSize    int // Number of logs to buffer (default: 1000)
+	FlushInterval int // Flush interval in seconds (default: 5)
+	MaxBatchSize  int // Maximum batch size (default: 100)
+	// Additional labels
+	Labels map[string]string
 }
 
 // MetricsConfig holds metrics configuration
@@ -242,6 +260,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
 	v.SetDefault("logging.outputPath", "stdout")
+	// Centralized logging defaults
+	v.SetDefault("logging.centralized.enabled", false)
+	v.SetDefault("logging.centralized.backend", "loki")
+	v.SetDefault("logging.centralized.lokiURL", "http://localhost:3100/loki/api/v1/push")
+	v.SetDefault("logging.centralized.bufferSize", 1000)
+	v.SetDefault("logging.centralized.flushInterval", 5)
+	v.SetDefault("logging.centralized.maxBatchSize", 100)
 
 	// Metrics defaults
 	v.SetDefault("metrics.enabled", true)

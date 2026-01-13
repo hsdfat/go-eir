@@ -9,6 +9,7 @@ import (
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/domain/service"
 	"github.com/hsdfat/go-eir/internal/logger"
+	"github.com/hsdfat/telco/version"
 )
 
 // Handler handles HTTP requests for the EIR service
@@ -490,6 +491,12 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 		"status":  "healthy",
 		"service": "eir",
 	})
+}
+
+// GetBuildInfo handles GET /build-info
+func (h *Handler) GetBuildInfo(c *gin.Context) {
+	buildInfo := version.GetBuildInfo()
+	c.JSON(http.StatusOK, buildInfo)
 }
 
 // Helper function to convert string to pointer
