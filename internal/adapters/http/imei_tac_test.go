@@ -29,7 +29,8 @@ import (
 
 func createEirService() (*mockEIRService, func()) {
 	// Create and return an instance of EirService
-	dbURL := "host=localhost port=5433 user=eir password=eir_password dbname=eir sslmode=disable"
+	//dbURL := "host=localhost port=5432 user=eir password=eir_password dbname=eir sslmode=disable"
+	dbURL := "host=14.225.198.206 port=5432 user=adong password=adong123 dbname=adongfoodv4 sslmode=disable"
 	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
 		panic(err)
@@ -94,6 +95,7 @@ func TestImei(t *testing.T) {
 	// Unit test 02:
 	t.Run("Eir_Add_2", func(t *testing.T) {
 		t.Log("Eir_Add_2 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
 		insertReq := ports.ImeiInfoInsert{
 			Imei:  "123456789012345",
 			Color: "w",
@@ -105,6 +107,7 @@ func TestImei(t *testing.T) {
 	// Unit test 03:
 	t.Run("Eir_Add_3", func(t *testing.T) {
 		t.Log("Eir_Add_3 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
 		insertReq := ports.ImeiInfoInsert{
 			Imei:  "12345678901234",
 			Color: "w",
@@ -116,6 +119,7 @@ func TestImei(t *testing.T) {
 	// Unit test 04: need check imei_max_length
 	t.Run("Eir_Add_4", func(t *testing.T) {
 		t.Log("Eir_Add_4 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
 		insertReq := ports.ImeiInfoInsert{
 			Imei:  "12345678901234567",
 			Color: "w",
@@ -123,6 +127,32 @@ func TestImei(t *testing.T) {
 		startImeiExt := "12345678901234"
 		InsertImei(eirService, client, server, insertReq, startImeiExt, t)
 	})
+
+	//Unit test 05:
+	t.Run("Eir_Add_5", func(t *testing.T) {
+		t.Log("Eir_Add_5 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  "12345678901234",
+			Color: "w",
+		}
+		startImeiExt := "12345678901234"
+		InsertImei(eirService, client, server, insertReq, startImeiExt, t)
+	})
+
+	//Unit test 06: Need check
+	t.Run("Eir_Add_6", func(t *testing.T) {
+		t.Log("Eir_Add_6 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  "12345678901234",
+			Color: "w",
+		}
+		startImeiExt := "12345678901234"
+		InsertImei(eirService, client, server, insertReq, startImeiExt, t)
+	})
+
+	//Unit test 07:
 }
 
 func InsertImei(eirService *mockEIRService, client *http.Client, server *Server, insertReq ports.ImeiInfoInsert, startImeiExt string, t *testing.T) {
