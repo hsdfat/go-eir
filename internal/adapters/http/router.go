@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/logger"
+	unifiedStats "github.com/hsdfat/telco/stats"
 )
 
 // ginLogger returns a gin.HandlerFunc (middleware) that logs requests using our observability logger
@@ -58,6 +59,28 @@ func ginLogger(logger logger.Logger) gin.HandlerFunc {
 	}
 }
 
+// statsMiddleware returns a gin.HandlerFunc (middleware) that tracks HTTP request statistics
+func statsMiddleware(statsCollector StatsCollector) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Process request
+		c.Next()
+
+		// Only track API endpoints, not health/stats endpoints
+		path := c.Request.URL.Path
+		if path == "/health" || path == "/api/stats" {
+			return
+		}
+
+		// Record stats after request completes
+		if statsCollector != nil {
+			statusCode := c.Writer.Status()
+			success := statusCode >= 200 && statusCode < 400
+			statsCollector.RecordRequest("http", success)
+			statsCollector.RecordResultCode("http", statusCode)
+		}
+	}
+}
+
 // ginRecovery returns a gin.HandlerFunc (middleware) that recovers from panics and logs using our observability logger
 func ginRecovery(logger logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -93,7 +116,7 @@ func ginRecovery(logger logger.Logger) gin.HandlerFunc {
 }
 
 // SetupRouter creates and configures the HTTP router
-func SetupRouter(eirService ports.EIRService, log logger.Logger) *gin.Engine {
+func SetupRouter(eirService ports.EIRService, statsCollector StatsCollector, log logger.Logger) *gin.Engine {
 	// Set Gin to release mode to disable debug logging
 	gin.SetMode(gin.ReleaseMode)
 
@@ -110,7 +133,10 @@ func SetupRouter(eirService ports.EIRService, log logger.Logger) *gin.Engine {
 	// Add custom logger middleware
 	router.Use(ginLogger(httpLogger))
 
-	handler := NewHandler(eirService, log)
+	// Add stats tracking middleware
+	router.Use(statsMiddleware(statsCollector))
+
+	handler := NewHandler(eirService, statsCollector, log)
 
 	// 5G N5g-eir API (3GPP TS 29.511)
 	v1 := router.Group("/n5g-eir-eic/v1")
@@ -131,8 +157,47 @@ func SetupRouter(eirService ports.EIRService, log logger.Logger) *gin.Engine {
 		api.POST("/insert-imei", handler.PostInsertImei)
 	}
 
+	// Unified stats API endpoint
+	router.GET("/api/stats", func(c *gin.Context) {
+		handleUnifiedStats(c, statsCollector)
+	})
+
 	// Health check
 	router.GET("/health", handler.HealthCheck)
 
+	// Build info
+	router.GET("/build-info", handler.GetBuildInfo)
+
 	return router
+}
+
+// handleUnifiedStats returns unified statistics in JSON format
+func handleUnifiedStats(c *gin.Context, statsCollector StatsCollector) {
+	if statsCollector == nil {
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Stats collector not initialized",
+		})
+		return
+	}
+
+	stats := statsCollector.GetStats()
+
+	// Type assert to ServiceStats
+	serviceStats, ok := stats.(*unifiedStats.ServiceStats)
+	if !ok {
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Invalid stats type",
+		})
+		return
+	}
+
+	// Wrap in unified response format
+	response := unifiedStats.StatsResponse{
+		Status: "success",
+		Data:   *serviceStats,
+	}
+
+	c.JSON(200, response)
 }

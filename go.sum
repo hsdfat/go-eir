@@ -131,12 +131,10 @@ github.com/hashicorp/serf v0.10.1 h1:Z1H2J60yRKvfDYAOZLd2MU0ND4AH/WDz7xYHDWQsIPY
 github.com/hashicorp/serf v0.10.1/go.mod h1:yL2t6BqATOLGc5HF7qbFkTfXoPIY0WZdWHfEvMqbG+4=
 github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85 h1:ajcKCmmM52ybc6f2hXU6IW/D/LHr7TDSrcxamVgiLmg=
 github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85/go.mod h1:9PRMWerzwBQAg/WToWQm2gOIWf56YFYJddajKOtMM0k=
-github.com/hsdfat/go-zlog v0.0.3 h1:lNZDSu5DbHMGt4QB7AwTUgSDnxAMs5tWyGVs6F7n9no=
-github.com/hsdfat/go-zlog v0.0.3/go.mod h1:fT0IzEu0cTAG/kC7YeM8BN0I+HqJOXME3nMRW2lRQKI=
-github.com/hsdfat/governance v0.0.0-20251229121118-3c3096eb305b h1:6Cfzi1vFAAprBraT8IoBcCvdp77qmyPOdwQaEqj1Jx4=
-github.com/hsdfat/governance v0.0.0-20251229121118-3c3096eb305b/go.mod h1:oYMJhdFB5MguVfLrIUbjjeQn0uXYeAeLscFPQA+GTis=
-github.com/hsdfat/telco v0.0.4 h1:0b0RlC9VeMSjzpZU5N6GcG6oy2fXOriEVXaYdOQOAv4=
-github.com/hsdfat/telco v0.0.4/go.mod h1:NyM9tj8SbLik9P/68F0mJ86b2fKgWuhXC8UEb2X3K7E=
+github.com/hsdfat/go-zlog v0.0.4-0.20260111162739-8e2e63137338 h1:IJUxM973vlxsPM/c9CgHlRd8K7TKvuHUjrC1G11zlBM=
+github.com/hsdfat/go-zlog v0.0.4-0.20260111162739-8e2e63137338/go.mod h1:fT0IzEu0cTAG/kC7YeM8BN0I+HqJOXME3nMRW2lRQKI=
+github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a h1:BPgcCdT5IgrAb1O3qSViGuAFAifMD4QRCrdDbJThKLE=
+github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a/go.mod h1:K6uqNVCW8pQmaKZm9mq5Mgnxhv69bfSpQxnO0qYNf74=
 github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
 github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
 github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
@@ -388,6 +386,8 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
+gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
+gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=
 gopkg.in/yaml.v2 v2.2.1/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v2 v2.2.4/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=

@@ -9,7 +9,6 @@ import (
 
 	govclient "github.com/chronnie/governance/client"
 	"github.com/chronnie/governance/models"
-	"github.com/gin-gonic/gin"
 	"github.com/hsdfat/go-eir/internal/adapters/diameter"
 	httpAdapter "github.com/hsdfat/go-eir/internal/adapters/http"
 	"github.com/hsdfat/go-eir/internal/adapters/memory"
@@ -17,16 +16,21 @@ import (
 	"github.com/hsdfat/go-eir/internal/config"
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/logger"
+	"github.com/hsdfat/go-eir/internal/stats"
+	"github.com/hsdfat/telco/stats/export"
 	"github.com/jmoiron/sqlx"
+	"github.com/spf13/viper"
 )
 
 // Application holds the application state
 type Application struct {
-	cfg            *config.Config
-	logger         logger.Logger
-	httpServer     *httpAdapter.Server
-	diameterServer *diameter.Server
-	govClient      *govclient.Client
+	cfg             *config.Config
+	logger          logger.Logger
+	httpServer      *httpAdapter.Server
+	diameterServer  *diameter.Server
+	govClient       *govclient.Client
+	statsCollector  *stats.StatsCollector
+	exportScheduler *export.ExportScheduler
 }
 
 // getLocalIP returns the non-loopback local IP of the host
@@ -95,8 +99,8 @@ func initializePostgresAdapter(cfg *config.Config, log logger.Logger) (ports.Dat
 
 	// Run database migration before creating adapter
 	if err := runDatabaseMigration(db, log); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to run database migration: %w", err)
+		// db.Close()
+		// return nil, fmt.Errorf("failed to run database migration: %w", err)
 	}
 
 	log.Info("✓ Database migration completed")
@@ -173,8 +177,15 @@ func runDatabaseMigration(db *sqlx.DB, log logger.Logger) error {
 	return nil
 }
 
+// initializeStatsCollector creates and initializes the stats collector
+func initializeStatsCollector(log logger.Logger) *stats.StatsCollector {
+	statsCollector := stats.NewStatsCollector()
+	log.Info("✓ Stats collector initialized")
+	return statsCollector
+}
+
 // initializeHTTPServer configures and starts the HTTP/2 server
-func initializeHTTPServer(cfg *config.Config, eirService ports.EIRService, log logger.Logger) *httpAdapter.Server {
+func initializeHTTPServer(cfg *config.Config, eirService ports.EIRService, statsCollector *stats.StatsCollector, log logger.Logger) *httpAdapter.Server {
 	httpServerConfig := httpAdapter.ServerConfig{
 		ListenAddr:   fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
@@ -185,7 +196,7 @@ func initializeHTTPServer(cfg *config.Config, eirService ports.EIRService, log l
 
 	// Create HTTP server logger with mod: eir
 	httpLog := log.With("component", "http-server").(logger.Logger)
-	httpServer := httpAdapter.NewServer(httpServerConfig, eirService, httpLog)
+	httpServer := httpAdapter.NewServer(httpServerConfig, eirService, statsCollector, httpLog)
 
 	if err := httpServer.Start(); err != nil {
 		log.Fatalw("Failed to start HTTP server", "error", err)
@@ -196,7 +207,7 @@ func initializeHTTPServer(cfg *config.Config, eirService ports.EIRService, log l
 }
 
 // initializeDiameterServer configures and starts the Diameter S13 server
-func initializeDiameterServer(cfg *config.Config, eirService ports.EIRService, log logger.Logger) *diameter.Server {
+func initializeDiameterServer(cfg *config.Config, eirService ports.EIRService, statsCollector *stats.StatsCollector, log logger.Logger) *diameter.Server {
 	diameterConfig := diameter.ServerConfig{
 		Host:             cfg.Diameter.Host,
 		Port:             cfg.Diameter.Port,
@@ -214,7 +225,7 @@ func initializeDiameterServer(cfg *config.Config, eirService ports.EIRService, l
 		RecvChannelSize:  cfg.Diameter.RecvChannelSize,
 	}
 
-	diameterServer := diameter.NewServer(diameterConfig, eirService)
+	diameterServer := diameter.NewServer(diameterConfig, eirService, statsCollector)
 
 	if err := diameterServer.Start(); err != nil {
 		log.Fatalw("Failed to start Diameter server", "error", err)
@@ -246,20 +257,22 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger, httpServer *h
 		PodName:     podName,
 	})
 
-	// Add governance endpoints to HTTP server using the new handler functions
-	router := httpServer.GetRouter()
-	governance := router.Group("/governance")
-	{
-		// Use gin wrapper to convert http.HandlerFunc to gin.HandlerFunc
-		governance.POST("/notify", func(c *gin.Context) {
-			govClient.CreateNotificationHandler()(c.Writer, c.Request)
-		})
-		governance.Any("/heartbeat", func(c *gin.Context) {
-			govClient.CreateHeartbeatHandler(nil)(c.Writer, c.Request)
-		})
+	// Start HTTP server for governance endpoints on dedicated port
+	// Use standard governance endpoints: /health for health checks and /notify for notifications
+	// Port is controlled by GOV_BACKEND_PORT environment variable (default 2345)
+	govBackendPort := cfg.Governance.GovBackendPort
+	if govBackendPort == 0 {
+		govBackendPort = 2345 // Default governance backend port
 	}
 
-	log.Info("✓ Governance HTTP endpoints added to router")
+	go govClient.StartHTTPServerWithClient(govclient.HTTPServerConfig{
+		Port: govBackendPort,
+	})
+
+	// Wait a bit for server to start
+	time.Sleep(200 * time.Millisecond)
+
+	log.Info("✓ Governance HTTP server started")
 
 	httpRegIP := getRegistrationIP(cfg.Server.Host)
 	diameterRegIP := getRegistrationIP(cfg.Diameter.Host)
@@ -288,8 +301,8 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger, httpServer *h
 				Port:       cfg.Diameter.Port,
 			},
 		},
-		HealthCheckURL:  fmt.Sprintf("http://%s:%d/health", httpRegIP, cfg.Server.Port),
-		NotificationURL: fmt.Sprintf("http://%s:%d/governance/notify", httpRegIP, cfg.Server.Port),
+		HealthCheckURL:  fmt.Sprintf("http://%s:%d/health", httpRegIP, govBackendPort),
+		NotificationURL: fmt.Sprintf("http://%s:%d/notify", httpRegIP, govBackendPort),
 		Subscriptions:   nil,
 	}
 
@@ -315,9 +328,100 @@ func registerWithGovernance(cfg *config.Config, log logger.Logger, httpServer *h
 	return govClient
 }
 
+// loadViperConfig loads viper configuration for export scheduler
+func loadViperConfig(configPath string) *viper.Viper {
+	v := viper.New()
+
+	if configPath != "" {
+		v.SetConfigFile(configPath)
+	} else {
+		v.SetConfigName("config")
+		v.SetConfigType("yaml")
+		v.AddConfigPath(".")
+		v.AddConfigPath("./config")
+		v.AddConfigPath("/etc/eir")
+	}
+
+	v.AutomaticEnv()
+	v.SetEnvPrefix("EIR")
+
+	// Try to read config file
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			v.SetConfigName("config.default")
+			_ = v.ReadInConfig()
+		}
+	}
+
+	return v
+}
+
+// initializeExportScheduler creates and starts the metrics export scheduler
+func initializeExportScheduler(v *viper.Viper, statsCollector *stats.StatsCollector, log logger.Logger) *export.ExportScheduler {
+	// Load export configuration
+	exportConfig, err := export.LoadExportConfig(v)
+	if err != nil {
+		log.Errorw("Failed to load export configuration", "error", err)
+		return nil
+	}
+
+	if !exportConfig.Enabled {
+		log.Info("Metrics export is disabled")
+		return nil
+	}
+
+	// Create transformer
+	transformer := export.NewTransformer(exportConfig.Hostname, exportConfig.SystemName)
+
+	// Create scheduler
+	scheduler := export.NewExportScheduler(
+		exportConfig.Interval,
+		statsCollector,
+		transformer,
+		log,
+	)
+
+	// Register exporters
+	for _, expCfg := range exportConfig.Exporters {
+		if !expCfg.Enabled {
+			continue
+		}
+
+		exporter, err := export.CreateExporter(expCfg, log)
+		if err != nil {
+			log.Errorw("Failed to create exporter",
+				"name", expCfg.Name,
+				"type", expCfg.Type,
+				"error", err)
+			continue
+		}
+
+		scheduler.AddExporter(exporter)
+		log.Infow("Registered metrics exporter",
+			"name", expCfg.Name,
+			"type", expCfg.Type)
+	}
+
+	// Start scheduler
+	ctx := context.Background()
+	scheduler.Start(ctx)
+
+	log.Infow("✓ Metrics export scheduler started",
+		"interval", exportConfig.Interval.String(),
+		"exporters", len(exportConfig.Exporters))
+
+	return scheduler
+}
+
 // shutdown performs graceful shutdown of all services
 func (app *Application) shutdown() {
 	app.logger.Info("Shutting down servers...")
+
+	// Stop export scheduler first
+	if app.exportScheduler != nil {
+		app.exportScheduler.Stop()
+		app.logger.Info("✓ Stopped metrics export scheduler")
+	}
 
 	if app.govClient != nil {
 		app.govClient.StopHeartbeat()

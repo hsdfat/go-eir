@@ -89,7 +89,8 @@ type GovernanceConfig struct {
 	ManagerURL       string        `json:"manager_url" yaml:"manager_url" env:"MANAGER_URL" envDefault:"http://governance-manager:8080" validate:"required_if=Enabled true"`
 	ServiceName      string        `json:"service_name" yaml:"service_name" env:"SERVICE_NAME" envDefault:"eir-service" validate:"required_if=Enabled true"`
 	PodName          string        `json:"pod_name" yaml:"pod_name" env:"POD_NAME"`
-	NotificationPort int           `json:"notification_port" yaml:"notification_port" env:"NOTIFICATION_PORT" envDefault:"9001" validate:"min=1,max=65535"`
+	NotificationPort int           `json:"notification_port" yaml:"notification_port" env:"NOTIFICATION_PORT" envDefault:"2345" validate:"min=1,max=65535"`
+	GovBackendPort   int           `json:"gov_backend_port" yaml:"gov_backend_port" env:"GOV_BACKEND_PORT" envDefault:"2345" validate:"min=1,max=65535"`
 	PodIP            string        `json:"pod_ip" yaml:"pod_ip" env:"POD_IP" envDefault:"127.0.0.1" validate:"required_if=Enabled true"`
 	Subscriptions    []string      `json:"subscriptions" yaml:"subscriptions" env:"SUBSCRIPTIONS" envDefault:"diam-gw,hss"`
 	Timeout          time.Duration `json:"timeout" yaml:"timeout" env:"TIMEOUT" envDefault:"10s"`

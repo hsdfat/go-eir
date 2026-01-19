@@ -29,6 +29,14 @@ type mockEIRService struct {
 	insertedImeis []string
 }
 
+// mockStatsCollector is a mock implementation of StatsCollector for testing
+type mockStatsCollector struct{}
+
+func (m *mockStatsCollector) RecordRequest(source string, success bool)    {}
+func (m *mockStatsCollector) RecordResultCode(source string, code int)    {}
+func (m *mockStatsCollector) IncrementActiveConnections()                  {}
+func (m *mockStatsCollector) DecrementActiveConnections()                  {}
+
 // mockEIRService is a mock implementation of EIRService for testing
 func newMockEIRService() (*mockEIRService, func()) {
 	_ = godotenv.Load("../../../.env")
@@ -185,7 +193,8 @@ func TestServerBasicSetup(t *testing.T) {
 	}
 
 	mockService := &mockEIRService{}
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 
 	if server == nil {
 		t.Fatal("Failed to create server")
@@ -242,7 +251,8 @@ func TestServerS13MEIdentityCheck(t *testing.T) {
 	}
 
 	mockService := &mockEIRService{}
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 
 	// Start server
 	if err := server.Start(); err != nil {
@@ -361,7 +371,8 @@ func TestServerS13MultipleRequests(t *testing.T) {
 	}
 
 	mockService := &mockEIRService{}
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 
 	// Start server
 	if err := server.Start(); err != nil {
@@ -466,7 +477,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -581,7 +593,8 @@ func TestCheckTacWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 	server.Start()
 	defer server.Stop()
 
@@ -654,7 +667,8 @@ func TestInsertTacWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start Diameter server: %v", err)
@@ -1197,7 +1211,8 @@ func TestInsertImeiWithPCAP(t *testing.T) {
 
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
-	server := NewServer(config, mockService)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start Diameter server: %v", err)

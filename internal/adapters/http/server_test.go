@@ -32,6 +32,21 @@ type mockEIRService struct {
 	insertedImeis []string
 }
 
+// mockStatsCollector is a mock implementation of StatsCollector for testing
+type mockStatsCollector struct{}
+
+func (m *mockStatsCollector) RecordRequest(source string, success bool) {
+	// Mock implementation - no-op for testing
+}
+
+func (m *mockStatsCollector) RecordResultCode(source string, code int) {
+	// Mock implementation - no-op for testing
+}
+
+func (m *mockStatsCollector) GetStats() interface{} {
+	return nil
+}
+
 // newMockEIRService creates a properly initialized mock service
 func newMockEIRService() (*mockEIRService, func()) {
 	_ = godotenv.Load("../../../.env")
@@ -223,7 +238,8 @@ func TestServerHTTP1Basic(t *testing.T) {
 
 	mockService, _ := newMockEIRService()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -258,7 +274,8 @@ func TestServerHTTP1WithPCAP(t *testing.T) {
 
 	mockService, _ := newMockEIRService()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -376,7 +393,8 @@ func TestServerH2C(t *testing.T) {
 
 	mockService, _ := newMockEIRService()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -496,7 +514,8 @@ func TestServerH2CMultipleRequests(t *testing.T) {
 
 	mockService, _ := newMockEIRService()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -581,7 +600,8 @@ func TestServerGracefulShutdown(t *testing.T) {
 
 	mockService, _ := newMockEIRService()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -620,7 +640,8 @@ func TestCheckImeiWithPCAP(t *testing.T) {
 	fmt.Println("after newMockEIRService() func")
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -924,7 +945,8 @@ func TestCheckTacWithPCAP(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -1131,7 +1153,8 @@ func TestInsertTacWithPCAP(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -1742,7 +1765,8 @@ func TestInsertImeiWithPCAP(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	mockStatsCollector := &mockStatsCollector{}
+	server := NewServer(config, mockService, mockStatsCollector, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
