@@ -135,6 +135,10 @@ github.com/hsdfat/go-zlog v0.0.4-0.20260111162739-8e2e63137338 h1:IJUxM973vlxsPM
 github.com/hsdfat/go-zlog v0.0.4-0.20260111162739-8e2e63137338/go.mod h1:fT0IzEu0cTAG/kC7YeM8BN0I+HqJOXME3nMRW2lRQKI=
 github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a h1:BPgcCdT5IgrAb1O3qSViGuAFAifMD4QRCrdDbJThKLE=
 github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a/go.mod h1:K6uqNVCW8pQmaKZm9mq5Mgnxhv69bfSpQxnO0qYNf74=
+github.com/hsdfat/telco v0.0.4 h1:0b0RlC9VeMSjzpZU5N6GcG6oy2fXOriEVXaYdOQOAv4=
+github.com/hsdfat/telco v0.0.4/go.mod h1:NyM9tj8SbLik9P/68F0mJ86b2fKgWuhXC8UEb2X3K7E=
+github.com/hsdfat/telco v0.0.5-0.20260112032731-d02ff96ff6e8 h1:DIbjucqZtD/g430VkstLpM6O5eM2r0eUWxX/LKEMD1Q=
+github.com/hsdfat/telco v0.0.5-0.20260112032731-d02ff96ff6e8/go.mod h1:PShX3LPdq52aKjcLedh4YNcNDuAGclpcw+NKgzzVQi0=
 github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
 github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
 github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=

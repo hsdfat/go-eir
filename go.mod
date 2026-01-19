@@ -4,12 +4,11 @@ go 1.25.2
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/chronnie/governance v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/gopacket v1.1.19
 	github.com/hsdfat/diam-gw v0.0.1-0.20251222173206-4b0f50697a85
 	github.com/hsdfat/go-zlog v0.0.4-0.20260111162739-8e2e63137338
-	github.com/hsdfat/telco v0.0.5-0.20260111153810-95524a597306
+	github.com/hsdfat/telco v0.0.5-0.20260112032731-d02ff96ff6e8
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
@@ -96,5 +95,3 @@ require (
 )
 
 replace github.com/chronnie/governance => github.com/hsdfat/governance v0.0.0-20260110065044-9e088598e01a
-
-replace github.com/hsdfat/telco => ../utils

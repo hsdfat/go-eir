@@ -2154,7 +2154,7 @@ func TestInsertImei(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	server := NewServer(config, mockService, &mockStatsCollector{}, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -2229,7 +2229,7 @@ func TestCheckImei(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	server := NewServer(config, mockService, &mockStatsCollector{}, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -2307,7 +2307,7 @@ func TestInsertTac(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	server := NewServer(config, mockService, &mockStatsCollector{}, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -2917,7 +2917,7 @@ func TestCheckTac(t *testing.T) {
 	mockService, cleanup := newMockEIRService()
 	defer cleanup()
 	log := logger.New("eir", "info")
-	server := NewServer(config, mockService, log)
+	server := NewServer(config, mockService, &mockStatsCollector{}, log)
 
 	if err := server.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)

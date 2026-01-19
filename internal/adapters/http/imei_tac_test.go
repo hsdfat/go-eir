@@ -31,7 +31,7 @@ Need check:
 - Overload testcase: Eir_Add_11 -> Eir_Add_14(handler overload and support overload fields)
 - CheckImei function, current use ImeiSampleData with fixed values
 - Has support to insert list value?
-- Eir_Add_22: value return
+- Eir_Add_22: value return -> need check
 */
 
 func createEirService() (*mockEIRService, func()) {
@@ -61,7 +61,7 @@ func TestImei(t *testing.T) {
 	log := logger.New("eir", "info")
 	server := NewServer(ServerConfig{
 		ListenAddr: "127.0.0.1:8080", // ip loopback
-	}, eirService, log)
+	}, eirService, &mockStatsCollector{}, log)
 
 	//create EIR server
 	if err := server.Start(); err != nil {
@@ -655,6 +655,14 @@ func TestImei(t *testing.T) {
 	t.Run("Eir_Add_19", func(t *testing.T) {
 		t.Log("Eir_Add_19 testcase")
 		eirService.ClearImeiInfo()
+		err := os.Setenv("IMEI_MAX_LENGTH", "16")
+		if err != nil {
+			t.Fatal(err)
+		}
+		err2 := os.Setenv("IMEI_CHECK_LENGTH", "14")
+		if err2 != nil {
+			t.Fatal(err2)
+		}
 		insertImeiReqList := []ports.ImeiInfoInsert{
 			ports.ImeiInfoInsert{
 				Imei:  "12345678901234",
