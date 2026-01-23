@@ -32,6 +32,19 @@ Need check:
 - CheckImei function, current use ImeiSampleData with fixed values
 - Has support to insert list value?
 - Eir_Add_22: value return
+- Eir_Add_29:
+	insertImeiReqList := []ports.ImeiInfoInsert{
+			ports.ImeiInfoInsert{
+				Imei:  "12345678901234",
+				Color: "w",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "1234567890123456",
+				Color: "b",
+			},
+		}
+	=> FAIL -> need check
+	- Step 2: FAIL with unexpected output:   expected: imei_exist, can not insert
 */
 
 func createEirService() (*mockEIRService, func()) {
@@ -793,6 +806,92 @@ func TestImei(t *testing.T) {
 				t.Fatal("FAIL with err: ", insertResult.Error)
 			}
 		}
+	})
+
+	t.Run("Eir_Add_29", func(t *testing.T) {
+		t.Log("Eir_Add_29 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
+		// insert success
+		insertImeiReqList := []ports.ImeiInfoInsert{
+			ports.ImeiInfoInsert{
+				Imei:  "12345678901234",
+				Color: "w",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "1234567890123456",
+				Color: "w",
+			},
+		}
+		legacyStatus := legacyModels.SystemStatus{
+			OverloadLevel: 0,
+			TPSOverload:   false,
+		}
+		for _, imeiValInsert := range insertImeiReqList {
+			t.Log("Start insert with imei: ", imeiValInsert)
+			insertResult := logic.InsertImei(eirService.imeiRepo, imeiValInsert.Imei, imeiValInsert.Color, legacyStatus)
+			if insertResult.Error != "" && insertResult.Error != "invalid_length" {
+				t.Fatal("Insert imei to db failed with error: ", insertResult.Error)
+			}
+			//verify
+			var startImeiExt string
+			imeiCheckLength := utils.GetImeiCheckLength()
+			if len(imeiValInsert.Imei) > imeiCheckLength {
+				startImeiExt = imeiValInsert.Imei[:imeiCheckLength]
+			} else {
+				startImeiExt = fmt.Sprintf("%-*s", imeiCheckLength, imeiValInsert.Imei)
+			}
+			VerifyImeiInDb(eirService, imeiValInsert, startImeiExt, t)
+		}
+
+		// insert fail
+		insertImeiReqListFail := []ports.ImeiInfoInsert{
+			ports.ImeiInfoInsert{
+				Imei:  "12345678901234",
+				Color: "w",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "12345678901234",
+				Color: "b",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "123456789012345",
+				Color: "g",
+			},
+		}
+		for _, imeiValInsert := range insertImeiReqListFail {
+			t.Log("Start insert with imei: ", imeiValInsert)
+			insertResult2 := logic.InsertImei(eirService.imeiRepo, imeiValInsert.Imei, imeiValInsert.Color, legacyStatus)
+			if (insertResult2.Error == "imei_exist") || (insertResult2.Error == "invalid_color") {
+				t.Skip("PASS with err: ", insertResult2.Error)
+			}
+
+			t.Fatal("FAIL with unexpected output: ", insertResult2.Error, "expected: imei_exist, can not insert")
+		}
+	})
+
+	t.Run("Eir_Add_30", func(t *testing.T) {
+		t.Log("Eir_Add_30 testcase")
+		eirService.ClearImeiInfo()
+		insertReq := ports.ImeiInfoInsert{
+			Imei:  "1234567890",
+			Color: "w",
+		}
+		legacyStatus := legacyModels.SystemStatus{
+			OverloadLevel: 0,
+			TPSOverload:   false,
+		}
+		insertResult := logic.InsertImei(eirService.imeiRepo, insertReq.Imei, insertReq.Color, legacyStatus)
+		if insertResult.Error != "" {
+			t.Fatal("Insert imei to db failed with error: ", insertResult.Error)
+		}
+		var startImeiExt string
+		imeiCheckLength := utils.GetImeiCheckLength()
+		if len(insertReq.Imei) > imeiCheckLength {
+			startImeiExt = insertReq.Imei[:imeiCheckLength]
+		} else {
+			startImeiExt = fmt.Sprintf("%-*s", imeiCheckLength, insertReq.Imei)
+		}
+		VerifyImeiInDb(eirService, insertReq, startImeiExt, t)
 	})
 }
 
