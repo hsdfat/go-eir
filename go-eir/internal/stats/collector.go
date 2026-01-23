@@ -41,9 +41,9 @@ type StatsCollector struct {
 	greylistedCount  atomic.Uint64
 
 	// Result code counters per interface
-	mu                     sync.RWMutex
-	diameterResultCodes    map[int]uint64
-	httpResultCodes        map[int]uint64
+	mu                  sync.RWMutex
+	diameterResultCodes map[int]uint64
+	httpResultCodes     map[int]uint64
 
 	// Active connections
 	activeConnections atomic.Int64

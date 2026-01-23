@@ -32,10 +32,10 @@ type mockEIRService struct {
 // mockStatsCollector is a mock implementation of StatsCollector for testing
 type mockStatsCollector struct{}
 
-func (m *mockStatsCollector) RecordRequest(source string, success bool)    {}
-func (m *mockStatsCollector) RecordResultCode(source string, code int)    {}
-func (m *mockStatsCollector) IncrementActiveConnections()                  {}
-func (m *mockStatsCollector) DecrementActiveConnections()                  {}
+func (m *mockStatsCollector) RecordRequest(source string, success bool) {}
+func (m *mockStatsCollector) RecordResultCode(source string, code int)  {}
+func (m *mockStatsCollector) IncrementActiveConnections()               {}
+func (m *mockStatsCollector) DecrementActiveConnections()               {}
 
 // mockEIRService is a mock implementation of EIRService for testing
 func newMockEIRService() (*mockEIRService, func()) {

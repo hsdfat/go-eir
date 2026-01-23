@@ -418,9 +418,9 @@ func (c *CacheConfig) Validate() error {
 		return nil // No validation needed if cache is disabled
 	}
 	validProviders := map[string]bool{
-		"redis":      true,
-		"memcached":  true,
-		"inmemory":   true,
+		"redis":     true,
+		"memcached": true,
+		"inmemory":  true,
 	}
 	if !validProviders[c.Provider] {
 		return fmt.Errorf("provider must be one of: redis, memcached, inmemory")
