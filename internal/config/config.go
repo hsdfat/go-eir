@@ -81,6 +81,24 @@ type LoggingConfig struct {
 	Level      string // "debug", "info", "warn", "error"
 	Format     string // "json", "text"
 	OutputPath string // "stdout", "stderr", or file path
+	// Centralized logging configuration
+	Centralized CentralizedLoggingConfig
+}
+
+// CentralizedLoggingConfig holds configuration for centralized logging
+type CentralizedLoggingConfig struct {
+	Enabled     bool   // Enable centralized logging
+	Backend     string // "loki", "http", "none"
+	LokiURL     string // Loki push API URL (e.g., http://loki:3100/loki/api/v1/push)
+	HTTPURL     string // Generic HTTP endpoint URL
+	TenantID    string // Optional tenant ID for multi-tenancy (Loki)
+	BearerToken string // Optional bearer token for authentication
+	// Buffering configuration
+	BufferSize    int // Number of logs to buffer (default: 1000)
+	FlushInterval int // Flush interval in seconds (default: 5)
+	MaxBatchSize  int // Maximum batch size (default: 100)
+	// Additional labels
+	Labels map[string]string
 }
 
 // MetricsConfig holds metrics configuration
@@ -92,9 +110,10 @@ type MetricsConfig struct {
 
 // GovernanceConfig holds governance/service discovery configuration
 type GovernanceConfig struct {
-	Enabled     bool   // Enable/disable governance registration
-	URL         string // Governance manager URL
-	FailOnError bool   // Panic if registration fails when enabled
+	Enabled        bool   // Enable/disable governance registration
+	URL            string // Governance manager URL
+	FailOnError    bool   // Panic if registration fails when enabled
+	GovBackendPort int    // Port for governance health check and notification endpoints (default 2345)
 }
 
 // Load loads configuration from file and environment variables
@@ -172,6 +191,7 @@ func Load(configPath string) (*Config, error) {
 	// Override governance config with values from environment
 	config.Governance.Enabled = envConfig.Governance
 	config.Governance.FailOnError = envConfig.GovFail
+	config.Governance.GovBackendPort = envConfig.GovBackendPort
 
 	// Convert TargetGov (host:port) to full URL format
 	if envConfig.TargetGov != "" {
@@ -240,6 +260,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
 	v.SetDefault("logging.outputPath", "stdout")
+	// Centralized logging defaults
+	v.SetDefault("logging.centralized.enabled", false)
+	v.SetDefault("logging.centralized.backend", "loki")
+	v.SetDefault("logging.centralized.lokiURL", "http://localhost:3100/loki/api/v1/push")
+	v.SetDefault("logging.centralized.bufferSize", 1000)
+	v.SetDefault("logging.centralized.flushInterval", 5)
+	v.SetDefault("logging.centralized.maxBatchSize", 100)
 
 	// Metrics defaults
 	v.SetDefault("metrics.enabled", true)
@@ -391,9 +418,9 @@ func (c *CacheConfig) Validate() error {
 		return nil // No validation needed if cache is disabled
 	}
 	validProviders := map[string]bool{
-		"redis":      true,
-		"memcached":  true,
-		"inmemory":   true,
+		"redis":     true,
+		"memcached": true,
+		"inmemory":  true,
 	}
 	if !validProviders[c.Provider] {
 		return fmt.Errorf("provider must be one of: redis, memcached, inmemory")

@@ -67,17 +67,26 @@ type ServerConfig struct {
 	RecvChannelSize  int
 }
 
+// StatsCollector interface for collecting statistics
+type StatsCollector interface {
+	RecordRequest(source string, success bool)
+	RecordResultCode(source string, code int)
+	IncrementActiveConnections()
+	DecrementActiveConnections()
+}
+
 // Server represents a Diameter S13 server
 type Server struct {
-	config     ServerConfig
-	handler    *S13Handler
-	diamServer *server.Server
-	logger     logger.Logger
-	listenAddr string
+	config         ServerConfig
+	handler        *S13Handler
+	diamServer     *server.Server
+	logger         logger.Logger
+	listenAddr     string
+	statsCollector StatsCollector
 }
 
 // NewServer creates a new Diameter S13 server using diam-gw server package
-func NewServer(config ServerConfig, eirService ports.EIRService) *Server {
+func NewServer(config ServerConfig, eirService ports.EIRService, statsCollector StatsCollector) *Server {
 	handler := NewS13Handler(eirService, config.OriginHost, config.OriginRealm)
 
 	// Initialize logger
@@ -111,11 +120,12 @@ func NewServer(config ServerConfig, eirService ports.EIRService) *Server {
 	diamServer := server.NewServer(serverConfig, log)
 
 	s := &Server{
-		config:     config,
-		handler:    handler,
-		diamServer: diamServer,
-		logger:     log,
-		listenAddr: listenAddr,
+		config:         config,
+		handler:        handler,
+		diamServer:     diamServer,
+		logger:         log,
+		listenAddr:     listenAddr,
+		statsCollector: statsCollector,
 	}
 
 	// Register S13 ME-Identity-Check-Request handler (Command Code 324)
@@ -160,6 +170,12 @@ func (s *Server) handleMEIdentityCheck(msg *connection.Message, conn connection.
 	diameterActiveConnections.Inc()
 	defer diameterActiveConnections.Dec()
 
+	// Track active connections in stats collector
+	if s.statsCollector != nil {
+		s.statsCollector.IncrementActiveConnections()
+		defer s.statsCollector.DecrementActiveConnections()
+	}
+
 	// Reconstruct full message from header and body
 	fullMsg := append(msg.Header, msg.Body...)
 
@@ -190,19 +206,40 @@ func (s *Server) handleMEIdentityCheck(msg *connection.Message, conn connection.
 		return
 	}
 
+	// Extract result code value
+	resultCodeValue := uint32(0)
+	if answer.ResultCode != nil {
+		resultCodeValue = uint32(*answer.ResultCode)
+	}
+
 	// Send response
 	resultLabel := "success"
+	success := true
 	if _, err := conn.Write(response); err != nil {
 		s.logger.Errorw("Failed to send ME-Identity-Check-Answer", "error", err)
 		diameterErrors.WithLabelValues("send_error").Inc()
 		resultLabel = "send_error"
+		success = false
 	} else {
 		s.logger.Infow("Sent ME-Identity-Check-Answer",
 			"imei", string(*req.TerminalInformation.Imei),
 			"result", answer.ResultCode)
+
+		// Determine success based on Diameter result code
+		// 2001 = DIAMETER_SUCCESS, anything else is considered a failure
+		if resultCodeValue != 2001 {
+			success = false
+		}
 	}
 
-	// Record metrics
+	// Record unified stats
+	if s.statsCollector != nil {
+		s.statsCollector.RecordRequest("diameter", success)
+		// Record result code for tracking
+		s.statsCollector.RecordResultCode("diameter", int(resultCodeValue))
+	}
+
+	// Record Prometheus metrics
 	duration := time.Since(startTime).Seconds()
 	diameterRequestDuration.WithLabelValues(commandName).Observe(duration)
 	diameterRequestsTotal.WithLabelValues(commandName, resultLabel).Inc()

@@ -9,19 +9,22 @@ import (
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/domain/service"
 	"github.com/hsdfat/go-eir/internal/logger"
+	"github.com/hsdfat/telco/version"
 )
 
 // Handler handles HTTP requests for the EIR service
 type Handler struct {
-	eirService ports.EIRService
-	logger     logger.Logger
+	eirService     ports.EIRService
+	logger         logger.Logger
+	statsCollector StatsCollector
 }
 
 // NewHandler creates a new HTTP handler
-func NewHandler(eirService ports.EIRService, log logger.Logger) *Handler {
+func NewHandler(eirService ports.EIRService, statsCollector StatsCollector, log logger.Logger) *Handler {
 	return &Handler{
-		eirService: eirService,
-		logger:     log,
+		eirService:     eirService,
+		statsCollector: statsCollector,
+		logger:         log,
 	}
 }
 
@@ -83,6 +86,7 @@ func (h *Handler) GetEquipmentStatus(c *gin.Context) {
 	equipmentStatus := convertColorToEquipmentStatus(response.Color)
 
 	h.logger.Infow("HTTP GetEquipmentStatus response", "pei", pei, "status", equipmentStatus, "color", response.Color)
+
 	// Return response
 	c.JSON(http.StatusOK, EirResponseData{
 		Status: equipmentStatus,
@@ -487,6 +491,12 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 		"status":  "healthy",
 		"service": "eir",
 	})
+}
+
+// GetBuildInfo handles GET /build-info
+func (h *Handler) GetBuildInfo(c *gin.Context) {
+	buildInfo := version.GetBuildInfo()
+	c.JSON(http.StatusOK, buildInfo)
 }
 
 // Helper function to convert string to pointer

@@ -1,0 +1,71 @@
+# EIR Configuration with Centralized Logging Example
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  readTimeout: 30s
+  writeTimeout: 30s
+  idleTimeout: 120s
+
+database:
+  host: localhost
+  port: 5432
+  user: eir
+  password: eir
+  database: eir
+  sslMode: disable
+  maxOpenConns: 25
+  maxIdleConns: 5
+  connMaxLifetime: 5m
+  connMaxIdleTime: 10m
+
+diameter:
+  host: 0.0.0.0
+  port: 3868
+  originHost: eir.example.com
+  originRealm: example.com
+  productName: Go-EIR
+  vendorID: 10415
+  maxConnections: 1000
+  readTimeout: 30s
+  writeTimeout: 10s
+  watchdogInterval: 30s
+  watchdogTimeout: 10s
+  maxMessageSize: 65535
+  sendChannelSize: 100
+  recvChannelSize: 100
+
+logging:
+  level: info
+  format: json
+  outputPath: stdout
+  # Centralized logging with Grafana Loki
+  centralized:
+    enabled: true
+    backend: loki  # Options: loki, http
+    lokiURL: http://localhost:3100/loki/api/v1/push
+    tenantID: ""  # Optional: for multi-tenancy
+    bearerToken: ""  # Optional: for authentication
+    # Buffering configuration
+    bufferSize: 1000
+    flushInterval: 5  # seconds
+    maxBatchSize: 100
+    # Additional labels to add to all logs
+    labels:
+      environment: production
+      datacenter: dc1
+      cluster: eir-cluster
+
+metrics:
+  enabled: true
+  port: 9090
+  path: /metrics
+
+cache:
+  enabled: false
+  provider: redis
+  redis:
+    host: localhost
+    port: 6379
+    password: ""
+    db: 0

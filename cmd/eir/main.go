@@ -19,6 +19,18 @@ func main() {
 		log.Fatalw("Failed to load configuration", "error", err)
 	}
 
+	// Initialize centralized logging if enabled
+	if err := logger.InitializeWithConfig(cfg); err != nil {
+		log.Warnw("Failed to initialize centralized logging, using console only", "error", err)
+	} else if cfg.Logging.Centralized.Enabled {
+		log.Infow("Centralized logging initialized",
+			"backend", cfg.Logging.Centralized.Backend,
+			"url", cfg.Logging.Centralized.LokiURL)
+	}
+
+	// Recreate logger after initialization
+	log = logger.New("eir", cfg.Logging.Level)
+
 	// Initialize PostgreSQL database adapter with migration
 	dbAdapter, err := initializePostgresAdapter(cfg, log)
 	if err != nil {
@@ -33,19 +45,28 @@ func main() {
 	eirService := service.NewEIRService(cfg, imeiRepo, auditRepo, nil)
 	log.Info("✓ EIR service initialized")
 
+	// Initialize stats collector
+	statsCollector := initializeStatsCollector(log)
+
 	// Initialize servers
-	httpServer := initializeHTTPServer(cfg, eirService, log)
-	diameterServer := initializeDiameterServer(cfg, eirService, log)
+	httpServer := initializeHTTPServer(cfg, eirService, statsCollector, log)
+	diameterServer := initializeDiameterServer(cfg, eirService, statsCollector, log)
 
 	// Register with governance (must be done after HTTP server is initialized)
 	govClient := registerWithGovernance(cfg, log, httpServer)
 
+	// Initialize metrics export scheduler
+	viperConfig := loadViperConfig("")
+	exportScheduler := initializeExportScheduler(viperConfig, statsCollector, log)
+
 	app := &Application{
-		cfg:            cfg,
-		logger:         log,
-		httpServer:     httpServer,
-		diameterServer: diameterServer,
-		govClient:      govClient,
+		cfg:             cfg,
+		logger:          log,
+		httpServer:      httpServer,
+		diameterServer:  diameterServer,
+		govClient:       govClient,
+		statsCollector:  statsCollector,
+		exportScheduler: exportScheduler,
 	}
 
 	quit := make(chan os.Signal, 1)

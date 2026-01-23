@@ -1,53 +1,39 @@
 server:
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 8085
-  readTimeout: "30s"
-  writeTimeout: "30s"
-  idleTimeout: "120s"
 
 database:
-  host: "127.0.0.1"    # Use IPv4 explicitly (localhost resolves to IPv6 which YugabyteDB may not bind to)
-  port: 5433           # YugabyteDB YSQL port
-  user: "yugabyte"     # YugabyteDB default user
-  password: ""         # No password for default user
-  database: "eir"
-  sslMode: "disable"
-  maxOpenConns: 25
-  maxIdleConns: 5
-  connMaxLifetime: "5m"
-  connMaxIdleTime: "10m"
+  host: 127.0.0.1
+  port: 5433
+  user: eir
+  password: eir
+  database: eir
+  sslMode: disable
 
 diameter:
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 3765
-  originHost: "eir.example.com"
-  originRealm: "example.com"
-  productName: "Go-EIR"
-  vendorID: 10415
-  maxConnections: 1000
-  readTimeout: "30s"
-  writeTimeout: "10s"
-  watchdogInterval: "30s"
-  watchdogTimeout: "10s"
-  maxMessageSize: 65535
-  sendChannelSize: 100
-  recvChannelSize: 100
-
-cache:
-  enabled: false
-  provider: "redis"
-  redis:
-    host: "localhost"
-    port: 6379
-    password: ""
-    db: 0
+  originHost: eir.test.com
+  originRealm: test.com
+  productName: Go-EIR
 
 logging:
-  level: "info"
-  format: "json"
-  outputPath: "stdout"
+  level: info
+  format: json
+  outputPath: stdout
+  centralized:
+    enabled: true
+    backend: loki
+    lokiURL: http://localhost:3100/loki/api/v1/push
+    bufferSize: 1000
+    flushInterval: 5
+    maxBatchSize: 100
+    labels:
+      environment: development
+      version: v1.0.0
+      datacenter: local
 
 metrics:
   enabled: true
-  port: 9090
-  path: "/metrics"
+  port: 9091
+  path: /metrics
