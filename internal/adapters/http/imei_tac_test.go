@@ -877,30 +877,75 @@ func TestImei(t *testing.T) {
 		}
 	})
 
+	//turn off db -> handle later
 	t.Run("Eir_Add_30", func(t *testing.T) {
 		t.Log("Eir_Add_30 testcase")
 		eirService.ClearImeiInfo()
-		insertReq := ports.ImeiInfoInsert{
-			Imei:  "1234567890",
-			Color: "w",
+	})
+
+	//Unit test 31:
+	t.Run("Eir_Add_31", func(t *testing.T) {
+		t.Log("Eir_Add_31 testcase")
+		eirService.ClearImeiInfo()
+		insertImeiReqList := []ports.ImeiInfoInsert{
+			ports.ImeiInfoInsert{
+				Imei:  "9",
+				Color: "w",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "3234567890123456",
+				Color: "b",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "223456789012345",
+				Color: "g",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "5",
+				Color: "w",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "42345678901234",
+				Color: "g",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "1234567890123456",
+				Color: "b",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "22345678901234",
+				Color: "g",
+			},
+			ports.ImeiInfoInsert{
+				Imei:  "1",
+				Color: "b",
+			},
 		}
+
 		legacyStatus := legacyModels.SystemStatus{
 			OverloadLevel: 0,
 			TPSOverload:   false,
 		}
-		insertResult := logic.InsertImei(eirService.imeiRepo, insertReq.Imei, insertReq.Color, legacyStatus)
-		if insertResult.Error != "" {
-			t.Fatal("Insert imei to db failed with error: ", insertResult.Error)
+		for _, imeiValInsert := range insertImeiReqList {
+			insertResult := logic.InsertImei(eirService.imeiRepo, imeiValInsert.Imei, imeiValInsert.Color, legacyStatus)
+			if insertResult.Error != "" && insertResult.Error != "invalid_length" {
+				t.Fatal("Insert imei to db failed with error: ", insertResult.Error)
+			}
+			//verify
+			var startImeiExt string
+			imeiCheckLength := utils.GetImeiCheckLength()
+			if len(imeiValInsert.Imei) > imeiCheckLength {
+				startImeiExt = imeiValInsert.Imei[:imeiCheckLength]
+			} else {
+				startImeiExt = fmt.Sprintf("%-*s", imeiCheckLength, imeiValInsert.Imei)
+			}
+			VerifyImeiInDb(eirService, imeiValInsert, startImeiExt, t)
 		}
-		var startImeiExt string
-		imeiCheckLength := utils.GetImeiCheckLength()
-		if len(insertReq.Imei) > imeiCheckLength {
-			startImeiExt = insertReq.Imei[:imeiCheckLength]
-		} else {
-			startImeiExt = fmt.Sprintf("%-*s", imeiCheckLength, insertReq.Imei)
-		}
-		VerifyImeiInDb(eirService, insertReq, startImeiExt, t)
 	})
+
+	// TAC_INFO
+	//Unit test 63:
+
 }
 
 func VerifyImeiInDb(eirService *mockEIRService, insertReq ports.ImeiInfoInsert, startImeiExt string, t *testing.T) {
