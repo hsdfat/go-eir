@@ -17,6 +17,8 @@ import (
 )
 
 /*
+==========================
+IMEI
 - go test -v -run TestImei ./internal/adapters/http/
 - CREATE TABLE IMEI_INFO (
      StartIMEI VARCHAR(16) PRIMARY KEY,
@@ -45,6 +47,17 @@ Need check:
 		}
 	=> FAIL -> need check
 	- Step 2: FAIL with unexpected output:   expected: imei_exist, can not insert
+
+==========================
+TAC
+CREATE TABLE TAC_INFO (
+    KeyTAC VARCHAR(64) PRIMARY KEY,
+    StartRangeTAC VARCHAR(20) NOT NULL,
+    EndRangeTAC VARCHAR(20) NOT NULL,
+    Color VARCHAR(10) NOT NULL CHECK (Color IN ('black', 'white', 'grey')),
+    PrevLink VARCHAR(64) REFERENCES TAC_INFO(KeyTAC) ON DELETE SET NULL
+);
+- Eir_Add_63: range_exist error
 */
 
 func createEirService() (*mockEIRService, func()) {
@@ -65,7 +78,7 @@ func createEirService() (*mockEIRService, func()) {
 	}, cleanup
 }
 
-func TestImei(t *testing.T) {
+func TestEirInsert(t *testing.T) {
 	t.Log("Get IMEI TAC Info")
 
 	//create object to connect db
@@ -943,8 +956,141 @@ func TestImei(t *testing.T) {
 		}
 	})
 
-	// TAC_INFO
-	//Unit test 63:
+	//todo: TAC_INFO
+	//Unit test 63: need add verify function
+	t.Run("Eir_Add_63", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tacList := []legacyModels.TacInfo{
+			{
+				KeyTac:        "1134567890123456-1134567890123456",
+				StartRangeTac: "1134567890123456",
+				EndRangeTac:   "1134567890123456",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "2-2",
+				StartRangeTac: "2",
+				EndRangeTac:   "2",
+				Color:         "white",
+			},
+		}
+		for _, tac := range tacList {
+			insertResult := logic.InsertTac(eirService.imeiRepo, tac)
+			if insertResult.Error != "" {
+				t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+			}
+			t.Log("insert tac success with : ", insertResult.Status)
+		}
+	})
+
+	//Unit test 64: need add verify function
+	t.Run("Eir_Add_64", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tacList := []legacyModels.TacInfo{
+			{
+				KeyTac:        "111-1222", //todo: why need ?
+				StartRangeTac: "11",
+				EndRangeTac:   "1222",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "1223-13",
+				StartRangeTac: "1223",
+				EndRangeTac:   "13",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "123456789012345-123456789012349",
+				StartRangeTac: "123456789012345",
+				EndRangeTac:   "123456789012349",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "1-9",
+				StartRangeTac: "1",
+				EndRangeTac:   "9",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "4-4234567890123456",
+				StartRangeTac: "4",
+				EndRangeTac:   "4234567890123456",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "1234567890123456-1234567890123457",
+				StartRangeTac: "1234567890123456",
+				EndRangeTac:   "1234567890123457",
+				Color:         "white",
+			},
+		}
+		for _, tac := range tacList {
+			insertResult := logic.InsertTac(eirService.imeiRepo, tac)
+			if insertResult.Error != "" {
+				t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+			}
+			t.Log("insert tac success with : ", insertResult.Status)
+		}
+	})
+
+	//Unit test 65: need add verify function
+	t.Run("Eir_Add_65", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tacList := []legacyModels.TacInfo{
+			{
+				KeyTac:        "133-133",
+				StartRangeTac: "133",
+				EndRangeTac:   "133",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "132-132",
+				StartRangeTac: "132",
+				EndRangeTac:   "132",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "134-134",
+				StartRangeTac: "134",
+				EndRangeTac:   "134",
+				Color:         "white",
+			},
+		}
+		for _, tac := range tacList {
+			insertResult := logic.InsertTac(eirService.imeiRepo, tac)
+			if insertResult.Error != "" {
+				t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+			}
+			t.Log("insert tac success with : ", insertResult.Status)
+		}
+	})
+
+	//Unit test 66: need add verify function
+	t.Run("Eir_Add_66", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "133-135",
+			StartRangeTac: "133",
+			EndRangeTac:   "135",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+		}
+		t.Log("insert tac success with : ", insertResult.Status)
+		tac2 := legacyModels.TacInfo{
+			KeyTac:        "133-139",
+			StartRangeTac: "133",
+			EndRangeTac:   "139",
+			Color:         "white",
+		}
+		insertResult2 := logic.InsertTac(eirService.imeiRepo, tac2)
+		if insertResult2.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Log("insert tac success with : ", insertResult2.Status)
+	})
 
 }
 
