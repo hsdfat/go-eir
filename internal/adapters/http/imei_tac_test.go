@@ -58,6 +58,7 @@ CREATE TABLE TAC_INFO (
     PrevLink VARCHAR(64) REFERENCES TAC_INFO(KeyTAC) ON DELETE SET NULL
 );
 - Eir_Add_63: range_exist error
+- Eir_Add_67: need add verify function, can check lai prevlink
 */
 
 func createEirService() (*mockEIRService, func()) {
@@ -1092,6 +1093,242 @@ func TestEirInsert(t *testing.T) {
 		t.Log("insert tac success with : ", insertResult2.Status)
 	})
 
+	//Unit test 67: need add verify function, can check lai prevlink
+	t.Run("Eir_Add_67", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "1222-1999",
+			StartRangeTac: "1222",
+			EndRangeTac:   "1999",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+		}
+		t.Log("insert tac success with : ", insertResult.Status)
+		tac2 := legacyModels.TacInfo{
+			KeyTac:        "1222-1333",
+			StartRangeTac: "1222",
+			EndRangeTac:   "1333",
+			Color:         "white",
+		}
+		insertResult2 := logic.InsertTac(eirService.imeiRepo, tac2)
+		if insertResult2.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac2, insertResult2.Status)
+
+		tac3 := legacyModels.TacInfo{
+			KeyTac:        "1666-1999",
+			StartRangeTac: "1666",
+			EndRangeTac:   "1999",
+			Color:         "white",
+		}
+		insertResult3 := logic.InsertTac(eirService.imeiRepo, tac3)
+		if insertResult3.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult3.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac3, insertResult3.Status)
+
+		tac4 := legacyModels.TacInfo{
+			KeyTac:        "1888-1888",
+			StartRangeTac: "1888",
+			EndRangeTac:   "1888",
+			Color:         "white",
+		}
+		insertResult4 := logic.InsertTac(eirService.imeiRepo, tac4)
+		if insertResult4.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult4.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac4, insertResult4.Status)
+
+		tac5 := legacyModels.TacInfo{
+			KeyTac:        "1222345-1222345",
+			StartRangeTac: "1222345",
+			EndRangeTac:   "1222345",
+			Color:         "white",
+		}
+		insertResult5 := logic.InsertTac(eirService.imeiRepo, tac5)
+		if insertResult5.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult5.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac5, insertResult5.Status)
+	})
+
+	//Unit test 68: need add verify function
+	t.Run("Eir_Add_68", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "1222-1888",
+			StartRangeTac: "1222",
+			EndRangeTac:   "1888",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+		}
+		t.Log("insert tac success with : ", insertResult.Status)
+		tac2 := legacyModels.TacInfo{
+			KeyTac:        "1333-1777",
+			StartRangeTac: "1333",
+			EndRangeTac:   "1777",
+			Color:         "white",
+		}
+		insertResult2 := logic.InsertTac(eirService.imeiRepo, tac2)
+		if insertResult2.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac2, insertResult2.Status)
+
+		tac3 := legacyModels.TacInfo{
+			KeyTac:        "1444-1666",
+			StartRangeTac: "1444",
+			EndRangeTac:   "1666",
+			Color:         "white",
+		}
+		insertResult3 := logic.InsertTac(eirService.imeiRepo, tac3)
+		if insertResult3.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult3.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac3, insertResult3.Status)
+
+		tac4 := legacyModels.TacInfo{
+			KeyTac:        "1999-1999",
+			StartRangeTac: "1999",
+			EndRangeTac:   "1999",
+			Color:         "white",
+		}
+		insertResult4 := logic.InsertTac(eirService.imeiRepo, tac4)
+		if insertResult4.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult4.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac4, insertResult4.Status)
+	})
+
+	//Unit test 69: need add verify function
+	t.Run("Eir_Add_69", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "1222-1666",
+			StartRangeTac: "1222",
+			EndRangeTac:   "1666",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+		}
+		t.Log("insert tac success with : ", insertResult.Status)
+		tac2 := legacyModels.TacInfo{
+			KeyTac:        "1333-1555",
+			StartRangeTac: "1333",
+			EndRangeTac:   "1555",
+			Color:         "white",
+		}
+		insertResult2 := logic.InsertTac(eirService.imeiRepo, tac2)
+		if insertResult2.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac2, insertResult2.Status)
+
+		tac3 := legacyModels.TacInfo{
+			KeyTac:        "1777-1888",
+			StartRangeTac: "1777",
+			EndRangeTac:   "1888",
+			Color:         "white",
+		}
+		insertResult3 := logic.InsertTac(eirService.imeiRepo, tac3)
+		if insertResult3.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult3.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac3, insertResult3.Status)
+	})
+
+	//Unit test 70: need add verify function
+	t.Run("Eir_Add_70", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "133-135",
+			StartRangeTac: "133",
+			EndRangeTac:   "135",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+		}
+		t.Log("insert tac success with : ", insertResult.Status)
+		tac2 := legacyModels.TacInfo{
+			KeyTac:        "134-135",
+			StartRangeTac: "134",
+			EndRangeTac:   "135",
+			Color:         "white",
+		}
+		insertResult2 := logic.InsertTac(eirService.imeiRepo, tac2)
+		if insertResult2.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac2, insertResult2.Status)
+	})
+
+	//Eir_Add_71, 72: Overload -> untested
+
+	//Unit test 73: need add verify function
+	t.Run("Eir_Add_73", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "123456789012345678-123456789012345678",
+			StartRangeTac: "123456789012345678",
+			EndRangeTac:   "123456789012345678",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error == "invalid_length" {
+			t.Skip("PASS because IMEI > 17 ")
+		}
+		t.Fatal("insert tac fail with status: ", insertResult.Status)
+	})
+
+	//Unit test 74: need add verify function
+	t.Run("Eir_Add_74", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tac1 := legacyModels.TacInfo{
+			KeyTac:        "9-1",
+			StartRangeTac: "9",
+			EndRangeTac:   "1",
+			Color:         "white",
+		}
+		insertResult := logic.InsertTac(eirService.imeiRepo, tac1)
+		if insertResult.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+		}
+		t.Log("insert tac success with : ", insertResult.Status)
+		tac2 := legacyModels.TacInfo{
+			KeyTac:        "8-1",
+			StartRangeTac: "8",
+			EndRangeTac:   "1",
+			Color:         "white",
+		}
+		insertResult2 := logic.InsertTac(eirService.imeiRepo, tac2)
+		if insertResult2.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac2, insertResult2.Status)
+
+		tac3 := legacyModels.TacInfo{
+			KeyTac:        "8-0",
+			StartRangeTac: "8",
+			EndRangeTac:   "0",
+			Color:         "white",
+		}
+		insertResult3 := logic.InsertTac(eirService.imeiRepo, tac3)
+		if insertResult3.Error != "" {
+			t.Fatal("Insert tac to db failed with error: ", insertResult2.Error)
+		}
+		t.Logf("insert tac %v success with status: %v", tac2, insertResult2.Status)
+	})
 }
 
 func VerifyImeiInDb(eirService *mockEIRService, insertReq ports.ImeiInfoInsert, startImeiExt string, t *testing.T) {
