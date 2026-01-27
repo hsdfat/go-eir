@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hsdfat/go-eir/internal/adapters/postgres"
+	"github.com/hsdfat/go-eir/internal/domain/models"
 	"github.com/hsdfat/go-eir/internal/domain/ports"
 	"github.com/hsdfat/go-eir/internal/logger"
 	legacyModels "github.com/hsdfat/go-eir/models"
@@ -17,6 +18,8 @@ import (
 )
 
 /*
+==========================
+IMEI
 - go test -v -run TestImei ./internal/adapters/http/
 - CREATE TABLE IMEI_INFO (
      StartIMEI VARCHAR(16) PRIMARY KEY,
@@ -45,6 +48,25 @@ Need check:
 		}
 	=> FAIL -> need check
 	- Step 2: FAIL with unexpected output:   expected: imei_exist, can not insert
+
+==========================
+TAC
+CREATE TABLE TAC_INFO (
+    KeyTAC VARCHAR(64) PRIMARY KEY,
+    StartRangeTAC VARCHAR(20) NOT NULL,
+    EndRangeTAC VARCHAR(20) NOT NULL,
+    Color VARCHAR(10) NOT NULL CHECK (Color IN ('black', 'white', 'grey')),
+    PrevLink VARCHAR(64) REFERENCES TAC_INFO(KeyTAC) ON DELETE SET NULL
+);
+- Eir_Add_63: range_exist error
+
+==========================
+Check Imei
+- Xem lai phuong thuc: CheckImei() trong file: server_test.go:
+	+ ko nen de phuong thuc nghiep vu trong file unit-test
+	+ neu trong truong hop co loi: error tra ve phai co gia tri, ko nen de nil
+	+ tham so usage ctx
+	+ lookupImeiInfo(imei): vong for cho 1 const
 */
 
 func createEirService() (*mockEIRService, func()) {
@@ -65,7 +87,7 @@ func createEirService() (*mockEIRService, func()) {
 	}, cleanup
 }
 
-func TestImei(t *testing.T) {
+func TestEirInsert(t *testing.T) {
 	t.Log("Get IMEI TAC Info")
 
 	//create object to connect db
@@ -943,9 +965,82 @@ func TestImei(t *testing.T) {
 		}
 	})
 
-	// TAC_INFO
-	//Unit test 63:
+	//todo: TAC_INFO
+	//Unit test 63: need add verify function
+	t.Run("Eir_Add_63", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tacList := []legacyModels.TacInfo{
+			{
+				KeyTac:        "1134567890123456-1134567890123456",
+				StartRangeTac: "1134567890123456",
+				EndRangeTac:   "1134567890123456",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "2-2",
+				StartRangeTac: "2",
+				EndRangeTac:   "2",
+				Color:         "white",
+			},
+		}
+		for _, tac := range tacList {
+			insertResult := logic.InsertTac(eirService.imeiRepo, tac)
+			if insertResult.Error != "" {
+				t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+			}
+			t.Log("insert tac success with : ", insertResult.Status)
+		}
+	})
 
+	//Unit test 64: need add verify function
+	t.Run("Eir_Add_64", func(t *testing.T) {
+		eirService.ClearTacInfo()
+		tacList := []legacyModels.TacInfo{
+			{
+				KeyTac:        "111-1222", //todo: why need ?
+				StartRangeTac: "11",
+				EndRangeTac:   "1222",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "1223-13",
+				StartRangeTac: "1223",
+				EndRangeTac:   "13",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "123456789012345-123456789012349",
+				StartRangeTac: "123456789012345",
+				EndRangeTac:   "123456789012349",
+				Color:         "white",
+			},
+			{
+				KeyTac:        "1-9",
+				StartRangeTac: "1",
+				EndRangeTac:   "9",
+				Color:         "white",
+			},
+			//{
+			//	KeyTac:        "4-4234567890123456",
+			//	StartRangeTac: "1",
+			//	EndRangeTac:   "9",
+			//	Color:         "white",
+			//},
+			//{
+			//	KeyTac:        "1234567890123456-1234567890123457",
+			//	StartRangeTac: "1234567890123456",
+			//	EndRangeTac:   "1234567890123457",
+			//	Color:         "white",
+			//},
+		}
+		for _, tac := range tacList {
+			insertResult := logic.InsertTac(eirService.imeiRepo, tac)
+			if insertResult.Error != "" {
+				t.Fatal("Insert tac to db failed with error: ", insertResult.Error)
+			}
+			t.Log("insert tac success with : ", insertResult.Status)
+		}
+	})
 }
 
 func VerifyImeiInDb(eirService *mockEIRService, insertReq ports.ImeiInfoInsert, startImeiExt string, t *testing.T) {
@@ -964,4 +1059,45 @@ func VerifyImeiInDb(eirService *mockEIRService, insertReq ports.ImeiInfoInsert, 
 		t.Fatalf("Inserted IMEI color mismatch: got %s, want %s", imeiInfo.Color, "w")
 	}
 	t.Logf("Verified success inserted IMEI: %s with color: %s", imeiInfo.StartIMEI, imeiInfo.Color)
+}
+
+// check imei-tac testcases
+func TestEirCheckImeiAndTac(t *testing.T) {
+	t.Log("Get IMEI TAC Info")
+
+	//create object to connect db
+	eirService, cleanup := createEirService()
+	defer cleanup()
+	log := logger.New("eir", "info")
+	server := NewServer(ServerConfig{
+		ListenAddr: "127.0.0.1:8080", // ip loopback
+	}, eirService, &mockStatsCollector{}, log)
+
+	//create EIR server
+	if err := server.Start(); err != nil {
+		t.Fatalf("Failed to start EIR server: %v", err)
+	}
+	defer server.Stop()
+	time.Sleep(200 * time.Millisecond)
+	t.Logf("Created EIR server: %v", server.GetAddr())
+
+	// Unit test 01: EIR_01 Insert IMEI valid
+	t.Run("EIR_01", func(t *testing.T) {
+		t.Log("EIR_01 testcase")
+		eirService.ClearImeiInfo() //delete all imei_info table in DB
+
+		imsi := "452040000000001"
+		status := models.SystemStatus{
+			OverloadLevel: 0,
+			TPSOverload:   false,
+		}
+		checkResult, err := eirService.CheckImei(nil, imsi, status)
+		if checkResult.Status != "ok" {
+			t.Fatalf("CheckImei error: got %s, want %s", checkResult.Status, "ok")
+		}
+		if err != nil {
+			t.Fatal("CheckImei error: ", err)
+		}
+		t.Log("CheckImei success: ", checkResult)
+	})
 }
